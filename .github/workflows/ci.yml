@@ -1,0 +1,41 @@
+# Typecheck, test, and prove the committed plugin.js is current.
+#
+# This mod is tested by booting a REAL game: its hooks run against levels
+# generated from Angband 4.2.6 gamedata, because a staircase-reachability fix
+# proven against a hand-built cave is a fix proven against a fixture. That
+# gamedata used to require a sparse checkout of the game's repository, because
+# @rpgm-tools/neo-angband-content was not published. It is, from 0.12.0, and it
+# exports the pack - so the checkout, the NEO_ANGBAND_REPO variable and the
+# guard that the pack had actually landed are all gone. This workflow now
+# proves the mod against exactly what a third-party author would install.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Fail when the manifest asks for a wildcard state grant or the real map, so every
+      # state domain the mod reads stays listed by name.
+      - run: node tools/check-grants.mjs
+
+      # typecheck, then test, then confirm the committed plugin.js is a current build of
+      # the source. That last one is the check nothing else in the chain can make: the
+      # catalogue's SHA-256 is taken FROM plugin.js, so a stale artefact verifies
+      # perfectly and is the file players run.
+      - run: pnpm verify

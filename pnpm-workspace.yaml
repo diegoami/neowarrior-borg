@@ -1,0 +1,20 @@
+# pnpm blocks a dependency's postinstall unless it is named here. esbuild is
+# false, and that is a measurement rather than a guess: it resolves its
+# executable through the platform optionalDependency (@esbuild/<plat>), so
+# `require("esbuild").version` answers and typecheck/test/check all pass with
+# the postinstall skipped. Same call neo-angband/pnpm-workspace.yaml makes for
+# the same dependency.
+allowBuilds:
+  esbuild: false
+
+# pnpm applies a minimumReleaseAge delay by default, so a recently published
+# package will not resolve - it silently falls back to whatever older
+# version IS old enough, which is worse than an error: a fresh install just
+# after a same-day @rpgm-tools release would silently pin a version older than
+# the declared range's actual latest. neo-angband/pnpm-workspace.yaml already
+# named this exact risk before any mod repository ran pnpm, and mod-forge's
+# migration hit it for real. These are first-party packages this project's
+# own release CI gates before they reach npm, so excluding them is the
+# documented alternative to disabling the protection outright.
+minimumReleaseAgeExclude:
+  - "@rpgm-tools/*"

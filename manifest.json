@@ -1,0 +1,114 @@
+{
+  "format": "neo-angband/mod/manifest",
+  "schemaVersion": 2,
+  "data": {
+    "id": "borg",
+    "name": "Borg",
+    "version": "1.4.0-beta.2",
+    "api": ">=2.0.0 <3.0.0",
+    "runtime": "in-process",
+    "engine": {
+      "range": ">=1.23.0-beta.1",
+      "because": "The first Neo Angband release with mod API 2, the truth domain the Borg reads perceived monsters through, and the loadout simulation."
+    },
+    "dependencies": {
+      "required": {
+        "core": {
+          "range": "*"
+        }
+      }
+    },
+    "capabilities": [
+      "command:add",
+      "state:player.read",
+      "state:monsters.read",
+      "state:map.read",
+      "state:inventory.read",
+      "state:floor.read",
+      "state:stores.read",
+      "state:spells.read",
+      "state:turn.read",
+      "state:monsters-actual.read",
+      "state:interaction.read",
+      "input:intent",
+      "input:prompt.reply",
+      "event:message",
+      "ui:title",
+      "profiles:manage",
+      "saves:manage"
+    ],
+    "description": "Angband's automatic player, ported from the borg in Angband 4.2.6. It plays through the same commands you use, over the frozen agent API, so it is an ordinary mod with no privileged code inside the engine.\n\nInstalling and enabling it does not give it your character. Press Ctrl-Z in play to hand over the keyboard; it warns you and asks you to confirm first. It is deterministic and draws only on its own seeded random number generator, so your save is not flagged as non-reproducible. Only one autoplayer can hold the keyboard at a time.",
+    "author": "neostryder",
+    "license": "GPL-2.0-only",
+    "repository": "https://github.com/neostryder/neo-angband-mod-borg",
+    "shape": "plugin",
+    "facets": [
+      "plugin"
+    ],
+    "rules": [
+      {
+        "flag": "borg.playsRisky",
+        "title": "Play risky",
+        "description": "borg_plays_risky. Skip the early hit-point and character-level gates that hold the Borg above a depth, wait longer before drinking a cure, and back away later in a losing fight. It reaches deeper sooner and dies more.",
+        "default": false,
+        "requiresReload": true
+      },
+      {
+        "flag": "borg.worshipsDamage",
+        "title": "Value melee and missile damage",
+        "description": "borg_worships_damage. Add weight to weapon and bow damage when the Borg scores a set of gear, so a trade that costs armour for damage looks better than it otherwise would.",
+        "default": false,
+        "requiresReload": true
+      },
+      {
+        "flag": "borg.worshipsSpeed",
+        "title": "Value speed",
+        "description": "borg_worships_speed. Add weight to a speed bonus when scoring gear.",
+        "default": false,
+        "requiresReload": true
+      },
+      {
+        "flag": "borg.worshipsHp",
+        "title": "Value hit points",
+        "description": "borg_worships_hp. Add weight to constitution and hit points when scoring gear.",
+        "default": false,
+        "requiresReload": true
+      },
+      {
+        "flag": "borg.worshipsMana",
+        "title": "Value spell points",
+        "description": "borg_worships_mana. Add weight to spell points when scoring gear. Has no effect on a warrior, who has no spell points.",
+        "default": false,
+        "requiresReload": true
+      },
+      {
+        "flag": "borg.worshipsAc",
+        "title": "Value armour class",
+        "description": "borg_worships_ac. Add weight to armour class when scoring gear.",
+        "default": false,
+        "requiresReload": true
+      },
+      {
+        "flag": "borg.worshipsGold",
+        "title": "Value gold",
+        "description": "borg_worships_gold. Sell harder, walk down rather than pay for a recall, and put off the first deep recall. It buys better equipment sooner and spends longer in town doing it. Upstream stops applying this past character level 20.",
+        "default": false,
+        "requiresReload": true
+      },
+      {
+        "flag": "borg.selfScum",
+        "title": "Save up for something it wants",
+        "description": "borg_self_scum. Let the Borg set itself a gold target and work in town until it can afford one item it has decided it needs. It only does this from character level 10, with a permanent light source and food in the pack.",
+        "default": true,
+        "requiresReload": true
+      },
+      {
+        "flag": "borg.munchkinStart",
+        "title": "Skimp on stockpiles for an early munchkin run",
+        "description": "borg_munchkin_start. Below character level borg_munchkin_level (12), value stockpiles of resist poison and speed potions, phase door, word of recall and the deeper cures less than it normally would, on the assumption that a young character is cashing out early. Upstream, this setting also makes the Borg stair-scum for loot to sell at this stage. That part is not ported, so here it changes what the Borg carries and leaves how it dives alone.",
+        "default": false,
+        "requiresReload": true
+      }
+    ]
+  }
+}

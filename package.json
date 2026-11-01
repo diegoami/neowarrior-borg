@@ -1,0 +1,45 @@
+{
+  "name": "neo-angband-mod-borg",
+  "version": "1.4.0-beta.2",
+  "private": true,
+  "description": "Borg: Angband 4.2.6's automatic player, ported faithfully and shipped as a mod",
+  "license": "GPL-2.0-only",
+  "author": "neostryder (RPGM Tools)",
+  "homepage": "https://github.com/neostryder/neo-angband-mod-borg",
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "//private": [
+    "Not published to npm, and not intended to be. A mod is distributed as a FOLDER the",
+    "game fetches - manifest.json plus plugin.js, at a tag, verified against a digest",
+    "that ships inside the game. npm is not in that path, and publishing would create a",
+    "second way to get this mod that nothing checks."
+  ],
+  "//dependencies": [
+    "The engine is a devDependency, never a dependency. plugin.js receives it as",
+    "ctx.core at load time; a runtime dependency would mean a second copy of the",
+    "engine's module state living inside the mod, which the builder refuses outright.",
+    "So it is here for TYPES and for the tests, which boot a real game against the",
+    "PUBLISHED engine rather than a workspace build - the version a player runs.",
+    "The mod SDK is a devDependency for the same reason: tools/build.mjs runs its",
+    "plugin builder, and the tests import its plugin types. Depending on a published",
+    "SDK pins a version that tracks the engine a player actually runs."
+  ],
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "check": "node tools/build.mjs --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "verify": "pnpm typecheck && pnpm test && pnpm check"
+  },
+  "devDependencies": {
+    "@rpgm-tools/neo-angband-core": "1.23.0-beta.1",
+    "@rpgm-tools/neo-angband-mod-sdk": "1.23.0-beta.1",
+    "@types/node": "^22.20.1",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

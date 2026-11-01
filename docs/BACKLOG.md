@@ -1,9 +1,10 @@
 # Backlog
 
-Everything believed worth doing that is not an M1 task. Ranked by expected
-effect on the project's number (deepest depth a warrior reaches). Items become
-tasks when M1's baseline (T07) says what actually limits depth; until then
-this file is the queue's source, not a promise. Each entry names its evidence.
+Everything believed worth doing that is not an M1 task. The queue lives as
+GitHub issues (label `backlog`); this file is the ranked index that points at
+them, and the rank order is expected effect on the project's number (deepest
+depth a warrior reaches). Items are promoted to tasks when M1's baseline (T07)
+says what actually limits depth; each entry names its evidence.
 
 ## Measured defects (fix first, each with a run record)
 
@@ -14,36 +15,38 @@ this file is the queue's source, not a promise. Each entry names its evidence.
 
 ## Unported upstream subsystems a warrior leans on
 
-2. **Ring swaps** (`borg_swap_rings` / `borg_wear_rings`,
-   `src/think-ladder.ts:679`; the swap valuation seams are deliberately
-   unwired - `src/think-session.ts`). A warrior's power IS its gear; swapping
-   on speed/resist rings is how melee characters survive depth. Upstream
-   4.2.6 has it; the port does not.
-3. **Weapon/armour swap buying** (`src/store/buy.ts:538-549` - steps 7A/7B
-   return early without swap valuation, so the Borg never stockpiles a swap
-   set). Same argument as 2; likely one shared valuation seam.
-4. **Munchkin stair-scum diving** (the un-ported half of
-   `borg_munchkin_start`, per our own SETTINGS.md) plus depth pacing:
-   the depth lever itself. Evidence: upstream `borg-reincarnate.c` and
-   `borg-think-dungeon.c` diving logic named in PLANNED.md.
-5. **Live-unique census** for `borg_kills_uniques` (`plugin.ts`'s held-back
-   settings list): hunting gatekeeper uniques matters most to characters who
-   cannot teleport away as freely - warriors.
-6. **`PF_COMBAT_REGEN`** - one arm of `borg_check_rest` needs an engine seam;
-   tracked upstream as neo-angband#34. Small, but rest decisions are
-   survival decisions at low hit points.
+2. **Ring swaps** - [#14](https://github.com/diegoami/neowarrior-borg/issues/14).
+   `borg_swap_rings` / `borg_wear_rings` unported
+   (`src/think-ladder.ts:679`; swap valuation seams deliberately unwired in
+   `src/think-session.ts`). A warrior's power IS its gear; swapping on
+   speed/resist rings is how melee characters survive depth.
+3. **Weapon/armour swap buying** - [#15](https://github.com/diegoami/neowarrior-borg/issues/15).
+   `src/store/buy.ts:538-549` - steps 7A/7B return early without swap
+   valuation, so the Borg never stockpiles a swap set. Same argument as 2;
+   likely one shared valuation seam.
+4. **Munchkin stair-scum diving and depth pacing** - [#16](https://github.com/diegoami/neowarrior-borg/issues/16).
+   The un-ported half of `borg_munchkin_start` (per our own SETTINGS.md) plus
+   upstream's depth pacing: the depth lever itself.
+5. **Live-unique census** for `borg_kills_uniques` - [#17](https://github.com/diegoami/neowarrior-borg/issues/17).
+   Hunting gatekeeper uniques matters most to characters who cannot teleport
+   away as freely - warriors.
+6. **`PF_COMBAT_REGEN`** - [#18](https://github.com/diegoami/neowarrior-borg/issues/18).
+   One arm of `borg_check_rest` needs an engine seam; tracked upstream as
+   neo-angband#34. Small, but rest decisions are survival decisions at low
+   hit points.
 
 ## Guardrails and instrumentation
 
-7. **Depth ceiling as a setting** (upstream `borg_no_deeper`, `borg_enchant_
-   limit`): now expressible through the numeric-settings seam T05 opens.
-   Value: bounded experiments and reproducible measurement windows.
-8. **Bake-off harness as a `tools/` runner** rather than a suite test, if T07
-   runs long: the sweep gets bigger (more seeds, more races) as divergences
-   need tighter comparisons.
-9. **Watched-run automation**: a CDP script that drives the desktop build and
-   writes `watched.md` skeletons - only if manual watching proves the
-   bottleneck.
+7. **Depth ceiling and enchant limit as settings** - [#19](https://github.com/diegoami/neowarrior-borg/issues/19).
+   Upstream `borg_no_deeper`, `borg_enchant_limit`, now expressible through
+   the numeric-settings seam T05 opens. Value: bounded experiments and
+   reproducible measurement windows.
+8. **Bake-off harness as a `tools/` runner** - [#20](https://github.com/diegoami/neowarrior-borg/issues/20),
+   if T07 runs long: the sweep gets bigger (more seeds, more races) as
+   divergences need tighter comparisons.
+9. **Watched-run automation** - [#21](https://github.com/diegoami/neowarrior-borg/issues/21):
+   a CDP script that drives the desktop build and writes `watched.md`
+   skeletons - only if manual watching proves the bottleneck.
 
 ## Deliberately not planned
 

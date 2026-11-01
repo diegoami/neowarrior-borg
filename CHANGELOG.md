@@ -4,6 +4,24 @@ All notable changes to this mod are recorded here. Versions follow the mod's own
 `manifest.json`, which is what the game reads, and each released version has a
 matching git tag that an install pins itself to.
 
+## 0.1.0 - 2026-11-02
+
+The fork's first version: upstream `1fa2f8d` (v1.4.0-beta.2) rebranded as
+`neowarrior`, with no behaviour change yet. The warrior birth, restart loop and
+run records come after this entry, one marked change each.
+
+- [Visible] **This is now the Warrior Borg.** New mod id (`neowarrior`), name,
+  repository and description; the title row becomes **New Warrior Borg
+  character**. The Borg inside is unchanged.
+- [Internal] **`ui:birth.replace` is declared** ahead of the automated warrior
+  birth; nothing uses it yet.
+- [Internal] Upstream's repository plumbing that does not apply to a fork is
+  removed: the issue redirect to the consolidated tracker, the dormant Nexus
+  publish and the upstream privacy gate. CI, the release notes script and
+  Dependabot stay.
+
+## Upstream, until v1.4.0-beta.2
+
 An entry has to matter to somebody running the mod. Documentation wording,
 internal refactoring and test-only additions are not recorded here. Bug fixes
 are, however small.

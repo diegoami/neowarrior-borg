@@ -1,11 +1,11 @@
 {
-  "name": "neo-angband-mod-borg",
-  "version": "1.4.0-beta.2",
+  "name": "neowarrior-borg",
+  "version": "0.1.0",
   "private": true,
-  "description": "Borg: Angband 4.2.6's automatic player, ported faithfully and shipped as a mod",
+  "description": "Warrior Borg: a hard fork of the Borg mod that always plays an optimized warrior and tries to get as deep as it can",
   "license": "GPL-2.0-only",
-  "author": "neostryder (RPGM Tools)",
-  "homepage": "https://github.com/neostryder/neo-angband-mod-borg",
+  "author": "diegoami",
+  "homepage": "https://github.com/diegoami/neowarrior-borg",
   "type": "module",
   "packageManager": "pnpm@12.16.1",
   "//private": [

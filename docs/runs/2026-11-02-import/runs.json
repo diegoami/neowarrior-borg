@@ -1,0 +1,23 @@
+{
+  "recorded": "2026-11-02",
+  "build": {
+    "commit": "301abd7",
+    "what": "unmodified import of neostryder/neo-angband-mod-borg at 1fa2f8d (v1.4.0-beta.2)",
+    "engine": "@rpgm-tools/neo-angband-core 1.23.0-beta.1 (published)",
+    "content": "sibling checkout neo-angband master at 836b8da2a (1.23.0-beta.2)"
+  },
+  "suite": {
+    "command": "pnpm vitest run",
+    "result": "421 tests: 420 passed, 1 failed",
+    "failure": {
+      "test": "src/play.test.ts > the Borg plays a real game > keeps playing for 1500 decisions (seed 1)",
+      "assertion": "\"close\" was issued 771 of 1500 times (cap: 750)",
+      "reproducedOnPristineUpstream": true,
+      "note": "identical count 771 on a clean checkout of upstream 1fa2f8d in this environment; content pack identical between game tags v1.23.0-beta.1 and v1.23.0-beta.2, so this is a deterministic defect of the pinned upstream combination, not something the fork introduced (rule 6). Candidate for the first measured divergence fix: half the session spent closing doors is depth the warrior is not gaining."
+    }
+  },
+  "warriorPlay": {
+    "measured": false,
+    "why": "the import commit has no warrior birth yet; the stock Borg rolls random race/class with roller stats. First warrior measurements belong to T07."
+  }
+}

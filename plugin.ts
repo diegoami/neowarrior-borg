@@ -1,11 +1,18 @@
 /**
  * Borg, as a mod's entry point.
  *
+ * THE FORK: this repository is neowarrior-borg, a hard fork of
+ * neostryder/neo-angband-mod-borg (imported at 1fa2f8d) whose purpose is a
+ * warrior-only Borg: automated warrior birth, an unattended warrior restart
+ * loop, and recorded runs. This file is upstream's except where a comment
+ * says FORK; the port under src/ is upstream's except where a comment names
+ * the C function a change belongs to.
+ *
  * This file and title.ts are the mod's own code, and src/api2/ is the bridge
  * between the game's API and the port: everything else under src/ is the port,
  * carried over from the game's repository. This file's job is to satisfy the
  * mod API, read the game's content once, and take a decision at each input wait.
- * title.ts adds the title screen's "New Borg character" row.
+ * title.ts adds the title screen's "New Warrior Borg character" row.
  *
  * ------------------------------------------------------------------
  * WHY BORG IS A MOD AT ALL

@@ -2,9 +2,9 @@
   "format": "neo-angband/mod/manifest",
   "schemaVersion": 2,
   "data": {
-    "id": "borg",
-    "name": "Borg",
-    "version": "1.4.0-beta.2",
+    "id": "neowarrior",
+    "name": "Warrior Borg",
+    "version": "0.1.0",
     "api": ">=2.0.0 <3.0.0",
     "runtime": "in-process",
     "engine": {
@@ -34,13 +34,14 @@
       "input:prompt.reply",
       "event:message",
       "ui:title",
+      "ui:birth.replace",
       "profiles:manage",
       "saves:manage"
     ],
-    "description": "Angband's automatic player, ported from the borg in Angband 4.2.6. It plays through the same commands you use, over the frozen agent API, so it is an ordinary mod with no privileged code inside the engine.\n\nInstalling and enabling it does not give it your character. Press Ctrl-Z in play to hand over the keyboard; it warns you and asks you to confirm first. It is deterministic and draws only on its own seeded random number generator, so your save is not flagged as non-reproducible. Only one autoplayer can hold the keyboard at a time.",
-    "author": "neostryder",
+    "description": "A warrior-only Borg: a hard fork of Angband's automatic player (the borg in Angband 4.2.6, as ported to Neo Angband by neostryder). It creates its own warrior with a chosen race and an optimized point-buy, plays through the same commands you use, and starts the next warrior when one dies - unattended, for as deep as it can get.\n\nInstalling and enabling it does not give it your character. Start it from the title screen's New Warrior Borg character row, or press Ctrl-Z in play to hand over the keyboard; it warns you and asks you to confirm first. It is deterministic and draws only on its own seeded random number generator. Only one autoplayer can hold the keyboard at a time.",
+    "author": "diegoami",
     "license": "GPL-2.0-only",
-    "repository": "https://github.com/neostryder/neo-angband-mod-borg",
+    "repository": "https://github.com/diegoami/neowarrior-borg",
     "shape": "plugin",
     "facets": [
       "plugin"

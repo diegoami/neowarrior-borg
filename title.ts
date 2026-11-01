@@ -28,7 +28,7 @@ export interface ProfileMemory {
   write(ids: readonly string[]): Promise<void>;
 }
 
-export const TITLE_LABEL = "New Borg character";
+export const TITLE_LABEL = "New Warrior Borg character";
 /** Core keeps P, N, O, R, M, I, U and Q for its own rows, and Squire uses S. */
 export const TITLE_KEY = "B";
 

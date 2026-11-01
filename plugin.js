@@ -1,8 +1,8 @@
-// borg - generated from plugin.ts by neo-angband-mod-build
+// neowarrior - generated from plugin.ts by neo-angband-mod-build
 // (@rpgm-tools/neo-angband-mod-sdk). Edit the TypeScript source, not this file.
 
 // title.ts
-var TITLE_LABEL = "New Borg character";
+var TITLE_LABEL = "New Warrior Borg character";
 var TITLE_KEY = "B";
 var WHERE_PROMPT = "Choose where the new Borg character plays";
 var WHERE_SEPARATE = "In a separate profile, with its own options, mods and characters";

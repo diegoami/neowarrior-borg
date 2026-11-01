@@ -57,8 +57,10 @@
  * adjustment-blind because the game's point-buy is. The INT-before-WIS tail
  * follows the engine's own leftover order for a warrior (generate_stats
  * step 4, birth.ts: DEX, then the non-spell stats INT, then WIS). The walk
- * never proposes a sell: the stock table is non-decreasing per stat, so no
- * sale can ever fund a cheaper buy elsewhere; refunds are still part of the
+ * never proposes a sell: economics would allow it (a refunded point from an
+ * expensive stat can fund a cheaper one), but the priority policy outranks
+ * it - selling stat X to buy stat Y always trades a higher-priority stat for
+ * a lower one; refunds are still part of the
  * input contract and the plan's per-stat books mirror the engine's
  * pointsSpent accounting, so a caller that walks a plan back through the
  * session's sell() reconciles against the same numbers.

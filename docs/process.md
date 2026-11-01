@@ -46,14 +46,18 @@ ending in a tagged release. When its tasks are merged:
 2. The main session opens a **milestone issue** (label `milestone`): proposed
    tag, candidate SHA, merged tasks, checks run, the claims to verify with
    `file:line`, and the owner decisions that are not defects.
-3. The owner runs a reviewer of their choosing against the milestone issue,
-   in a fresh session (e.g. `opencode run -m <model> "Read docs/process.md §4
-   and review milestone issue #N"`). The reviewer verifies claims against the
-   code, opens one issue per reproduced finding, and posts AGREE or BLOCK on
-   the milestone issue. It never edits the repository.
+3. The owner runs a reviewer of their choosing against the milestone issue, in
+   a fresh session, with a prompt from [`docs/review-prompt.md`](review-prompt.md).
+   The reviewer verifies claims against the code, opens one issue per
+   reproduced finding, and posts AGREE or BLOCK on the milestone issue. It
+   never edits the repository.
 4. BLOCK findings are fixed in ordinary tasks; the candidate moves and the
    owner re-reviews. AGREE (or an owner tag without review, noted on the issue)
    tags the SHA. Tags never move (rule 9).
+
+Per-task reviews work the same way when the owner wants one: same template,
+verdict comment on the task's issue. The main session never auto-dispatches a
+reviewer and never model-pairs one; the owner chooses.
 
 ## 5. Run records
 

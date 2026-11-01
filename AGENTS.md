@@ -10,6 +10,10 @@ For any agent or tool working in this repository (OpenCode, Codex, Claude Code, 
   loop, run records, milestones.
 - **Tasks**: [`docs/tasks/README.md`](docs/tasks/README.md) indexes
   `docs/tasks/T<nn>.md`; the issue's `status:*` label is the status.
+- **Plan**: [`docs/plans/m1.md`](docs/plans/m1.md) - the current milestone's
+  goal, architecture, sequence and acceptance. **Backlog**:
+  [`docs/BACKLOG.md`](docs/BACKLOG.md) - ranked, with evidence, cut into
+  tasks when the baseline ranks them.
 - **Run records**: [`docs/runs/README.md`](docs/runs/README.md) - the format
   and the baselines. Depth progress is the project's number; a change without
   a record is an unmeasured change.

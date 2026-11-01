@@ -23,7 +23,7 @@ upstream-faithful throughout; measurement before divergence.
 
 ## M2 - Deeper (planned)
 
-Measured divergences, one task each, each carrying its run record (rule 1):
-the seed-1 door-closing defect (see `docs/runs/2026-11-02-import/`), warrior
-item valuation, depth pacing. Planned when M1's baseline says what actually
-limits depth.
+Cut from [`docs/BACKLOG.md`](../BACKLOG.md) once M1's baseline (T07) says what
+actually limits depth: the measured defects first (the seed-1 door-closing
+loop, #12), then the unported subsystems a warrior leans on (ring and
+weapon/armour swaps, diving), each divergence carrying its run record (rule 1).

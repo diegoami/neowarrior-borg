@@ -1,0 +1,2128 @@
+{
+  "recorded": "2026-11-02",
+  "build": {
+    "mod": "Warrior Borg 0.1.0",
+    "engine": "@rpgm-tools/neo-angband-core 1.23.0-beta.1",
+    "content": "sibling checkout neo-angband at ceb484205 (branch neowarrior-lab; content pack unchanged since 836b8da2a, v1.23.0-beta.2 - the same pack the T06 session and the import baseline ran)",
+    "seeds": [
+      1,
+      7,
+      20,
+      23,
+      34,
+      42,
+      49,
+      99
+    ],
+    "caps": {
+      "decisions": 600
+    },
+    "races": [
+      "Half-Troll",
+      "Dunadan",
+      "High-Elf",
+      "Dwarf"
+    ],
+    "variants": [
+      {
+        "name": "pin",
+        "engine": "@rpgm-tools/neo-angband-core 1.23.0-beta.1",
+        "note": "the published @rpgm-tools/neo-angband-core 1.23.0-beta.1 as installed, unmodified: dist/game/trap.js md5 c89b1b08474b1692b352f8d0b64823f4 (the pristine hash B01's causality record also holds). The door-close engine gap (#12 / neostryder/neo-angband#428) is part of this variant's reality: a warrior that walks into it stalls on free refusals and can survive its slice with the turn counter frozen."
+      },
+      {
+        "name": "patched-engine",
+        "engine": "@rpgm-tools/neo-angband-core 1.23.0-beta.1",
+        "note": "the installed @rpgm-tools/neo-angband-core 1.23.0-beta.1 with B01's one-line fix applied to the compiled dist/game/trap.js for this variant only: noteSpot(state, grid) added in installChunkFeatHook (plus its import), restoring square_note_spot on the live setFeat path (cave-square.c:1261, upstream neostryder/neo-angband#428). md5 c89b1b08474b1692b352f8d0b64823f4 (pristine) -> 209174f626f5fd4818726c0458ea490b (patched), diff = exactly those 2 edits; reverted from the saved original after the variant, cmp byte-identical."
+      }
+    ]
+  },
+  "runs": [
+    {
+      "variant": "pin",
+      "seed": 1,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 7482,
+      "maxDepth": 2,
+      "clvl": 2,
+      "kills": 14,
+      "gold": 198,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 9,
+        "walk": 545,
+        "open": 24,
+        "quaff": 1,
+        "pickup": 6,
+        "wield": 2,
+        "ascend": 8,
+        "rest": 5
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 7,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 470,
+      "turns": 4720,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 2,
+      "gold": 146,
+      "causeOfDeath": "wild cat",
+      "commands": {
+        "descend": 13,
+        "walk": 433,
+        "open": 10,
+        "ascend": 12,
+        "quaff": 1,
+        "pickup": 1,
+        "read": 1
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "pin",
+      "seed": 20,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 363,
+      "turns": 5049,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 4,
+      "gold": 146,
+      "causeOfDeath": "floating eye",
+      "commands": {
+        "descend": 6,
+        "walk": 346,
+        "ascend": 5,
+        "rest": 5,
+        "quaff": 1,
+        "pickup": 1
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "pin",
+      "seed": 23,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 369,
+      "turns": 3605,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 11,
+      "gold": 162,
+      "causeOfDeath": "wild dog",
+      "commands": {
+        "descend": 9,
+        "ascend": 8,
+        "walk": 342,
+        "open": 8,
+        "quaff": 2,
+        "pickup": 1
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "pin",
+      "seed": 34,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 44,
+      "turns": 1365,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 1,
+      "gold": 149,
+      "causeOfDeath": "grey mold",
+      "commands": {
+        "descend": 1,
+        "walk": 40,
+        "quaff": 1,
+        "open": 3
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "pin",
+      "seed": 42,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 8656,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 5,
+      "gold": 161,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 17,
+        "ascend": 15,
+        "walk": 548,
+        "pickup": 2,
+        "wield": 1,
+        "open": 15,
+        "read": 1,
+        "quaff": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 49,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 244,
+      "turns": 2356,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 1,
+      "gold": 140,
+      "causeOfDeath": "giant white centipede",
+      "commands": {
+        "descend": 6,
+        "walk": 142,
+        "ascend": 5,
+        "quaff": 1,
+        "pickup": 1,
+        "open": 4,
+        "tunnel": 86
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "pin",
+      "seed": 99,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6688,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 10,
+      "gold": 137,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 20,
+        "walk": 538,
+        "ascend": 18,
+        "read": 3,
+        "tunnel": 4,
+        "rest": 5,
+        "open": 10,
+        "quaff": 1,
+        "pickup": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 1,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 7456,
+      "maxDepth": 2,
+      "clvl": 2,
+      "kills": 10,
+      "gold": 182,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 11,
+        "walk": 524,
+        "open": 33,
+        "quaff": 1,
+        "pickup": 3,
+        "wield": 1,
+        "rest": 16,
+        "ascend": 10,
+        "disarm": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 7,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6587,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 5,
+      "gold": 146,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 14,
+        "walk": 538,
+        "open": 20,
+        "ascend": 13,
+        "tunnel": 2,
+        "pickup": 2,
+        "wield": 1,
+        "rest": 9,
+        "quaff": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 20,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 7273,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 6,
+      "gold": 186,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 15,
+        "walk": 533,
+        "ascend": 13,
+        "open": 24,
+        "pickup": 9,
+        "rest": 4,
+        "quaff": 1,
+        "read": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 23,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6546,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 4,
+      "gold": 201,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 18,
+        "ascend": 17,
+        "walk": 543,
+        "open": 16,
+        "quaff": 1,
+        "pickup": 2,
+        "rest": 3
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 34,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 44,
+      "turns": 610,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 1,
+      "gold": 149,
+      "causeOfDeath": "grey mold",
+      "commands": {
+        "descend": 1,
+        "walk": 40,
+        "rest": 2,
+        "open": 2
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "pin",
+      "seed": 42,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6243,
+      "maxDepth": 2,
+      "clvl": 1,
+      "kills": 4,
+      "gold": 214,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 16,
+        "ascend": 15,
+        "walk": 546,
+        "pickup": 5,
+        "wield": 2,
+        "open": 14,
+        "rest": 2
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 49,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6789,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 6,
+      "gold": 193,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 13,
+        "walk": 555,
+        "ascend": 12,
+        "quaff": 1,
+        "pickup": 3,
+        "rest": 4,
+        "open": 12
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 99,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6767,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 4,
+      "gold": 154,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 18,
+        "walk": 552,
+        "ascend": 16,
+        "open": 8,
+        "quaff": 1,
+        "rest": 4,
+        "read": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 1,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 176,
+      "turns": 2346,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 2,
+      "gold": 140,
+      "causeOfDeath": "wild cat",
+      "commands": {
+        "descend": 8,
+        "walk": 146,
+        "ascend": 7,
+        "pickup": 3,
+        "quaff": 2,
+        "rest": 9,
+        "open": 2
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "pin",
+      "seed": 7,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 7635,
+      "maxDepth": 2,
+      "clvl": 1,
+      "kills": 2,
+      "gold": 174,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 11,
+        "walk": 538,
+        "ascend": 10,
+        "open": 12,
+        "quaff": 1,
+        "rest": 3,
+        "pickup": 5,
+        "wield": 3,
+        "drop": 15,
+        "tunnel": 2
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 20,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6271,
+      "maxDepth": 2,
+      "clvl": 1,
+      "kills": 6,
+      "gold": 179,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 15,
+        "walk": 551,
+        "open": 16,
+        "ascend": 13,
+        "pickup": 2,
+        "wield": 1,
+        "read": 1,
+        "quaff": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 23,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 7972,
+      "maxDepth": 2,
+      "clvl": 1,
+      "kills": 2,
+      "gold": 177,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 11,
+        "walk": 547,
+        "open": 20,
+        "quaff": 2,
+        "rest": 5,
+        "ascend": 10,
+        "tunnel": 2,
+        "pickup": 3
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 34,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 64,
+      "turns": 667,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 1,
+      "gold": 165,
+      "causeOfDeath": "grey mold",
+      "commands": {
+        "descend": 2,
+        "walk": 56,
+        "rest": 1,
+        "ascend": 1,
+        "open": 2,
+        "pickup": 2,
+        "read": 1
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "pin",
+      "seed": 42,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6825,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 7,
+      "gold": 149,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 16,
+        "walk": 538,
+        "quaff": 1,
+        "rest": 5,
+        "ascend": 15,
+        "pickup": 1,
+        "open": 24
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 49,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6813,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 6,
+      "gold": 134,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 21,
+        "walk": 538,
+        "open": 8,
+        "ascend": 19,
+        "pickup": 4,
+        "quaff": 1,
+        "rest": 8,
+        "read": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 99,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6649,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 13,
+      "gold": 143,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 16,
+        "walk": 546,
+        "ascend": 15,
+        "quaff": 1,
+        "open": 6,
+        "pickup": 4,
+        "wield": 1,
+        "rest": 9,
+        "tunnel": 2
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 1,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 116,
+      "turns": 1169,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 1,
+      "gold": 152,
+      "causeOfDeath": "soldier ant",
+      "commands": {
+        "descend": 6,
+        "walk": 95,
+        "ascend": 5,
+        "quaff": 1,
+        "tunnel": 10
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "pin",
+      "seed": 7,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6968,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 9,
+      "gold": 137,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 17,
+        "ascend": 15,
+        "walk": 521,
+        "open": 7,
+        "quaff": 1,
+        "rest": 14,
+        "disarm": 1,
+        "pickup": 7,
+        "wield": 1,
+        "read": 1,
+        "tunnel": 15
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 20,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 527,
+      "turns": 10399,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 10,
+      "gold": 170,
+      "causeOfDeath": "wild cat",
+      "commands": {
+        "descend": 9,
+        "walk": 449,
+        "ascend": 8,
+        "pickup": 3,
+        "wield": 1,
+        "quaff": 1,
+        "rest": 16,
+        "open": 6,
+        "disarm": 1,
+        "tunnel": 33,
+        "read": 1
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "pin",
+      "seed": 23,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6681,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 5,
+      "gold": 176,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 14,
+        "ascend": 14,
+        "walk": 552,
+        "pickup": 2,
+        "open": 10,
+        "rest": 5,
+        "disarm": 2,
+        "read": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 34,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6727,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 2,
+      "gold": 144,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 19,
+        "walk": 538,
+        "pickup": 4,
+        "ascend": 18,
+        "quaff": 1,
+        "open": 10,
+        "tunnel": 10
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 42,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 5966,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 4,
+      "gold": 160,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 26,
+        "ascend": 25,
+        "walk": 533,
+        "quaff": 1,
+        "tunnel": 1,
+        "open": 10,
+        "pickup": 4
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 49,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 7331,
+      "maxDepth": 2,
+      "clvl": 2,
+      "kills": 7,
+      "gold": 174,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 21,
+        "walk": 527,
+        "ascend": 20,
+        "quaff": 1,
+        "rest": 17,
+        "open": 10,
+        "pickup": 3,
+        "wield": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "pin",
+      "seed": 99,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 541,
+      "turns": 16648,
+      "maxDepth": 2,
+      "clvl": 2,
+      "kills": 10,
+      "gold": 134,
+      "causeOfDeath": "wild dog",
+      "commands": {
+        "descend": 11,
+        "walk": 442,
+        "ascend": 10,
+        "quaff": 2,
+        "pickup": 4,
+        "open": 18,
+        "rest": 7,
+        "disarm": 2,
+        "tunnel": 43,
+        "wield": 2,
+        "read": 1
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 1,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6838,
+      "maxDepth": 1,
+      "clvl": 3,
+      "kills": 15,
+      "gold": 229,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 16,
+        "walk": 544,
+        "open": 10,
+        "quaff": 1,
+        "pickup": 9,
+        "wield": 1,
+        "ascend": 15,
+        "rest": 3,
+        "tunnel": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 7,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 7139,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 6,
+      "gold": 180,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 19,
+        "walk": 546,
+        "open": 11,
+        "ascend": 18,
+        "quaff": 1,
+        "pickup": 2,
+        "rest": 2,
+        "disarm": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 20,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 363,
+      "turns": 5049,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 4,
+      "gold": 146,
+      "causeOfDeath": "floating eye",
+      "commands": {
+        "descend": 6,
+        "walk": 346,
+        "ascend": 5,
+        "rest": 5,
+        "quaff": 1,
+        "pickup": 1
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 23,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6040,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 5,
+      "gold": 186,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 15,
+        "ascend": 14,
+        "walk": 552,
+        "open": 12,
+        "tunnel": 2,
+        "pickup": 3,
+        "rest": 1,
+        "quaff": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 34,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 51,
+      "turns": 1443,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 1,
+      "gold": 149,
+      "causeOfDeath": "grey mold",
+      "commands": {
+        "descend": 1,
+        "walk": 48,
+        "quaff": 1,
+        "open": 2
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 42,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 8215,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 4,
+      "gold": 161,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 18,
+        "ascend": 16,
+        "walk": 551,
+        "pickup": 1,
+        "wield": 1,
+        "open": 11,
+        "read": 1,
+        "quaff": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 49,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6592,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 2,
+      "gold": 189,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 20,
+        "walk": 547,
+        "ascend": 19,
+        "quaff": 1,
+        "pickup": 2,
+        "open": 7,
+        "rest": 4
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 99,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 530,
+      "turns": 5334,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 5,
+      "gold": 137,
+      "causeOfDeath": "metallic red centipede",
+      "commands": {
+        "descend": 14,
+        "walk": 487,
+        "ascend": 12,
+        "read": 1,
+        "tunnel": 1,
+        "rest": 8,
+        "pickup": 1,
+        "quaff": 2,
+        "open": 5
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 1,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6670,
+      "maxDepth": 1,
+      "clvl": 3,
+      "kills": 13,
+      "gold": 173,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 19,
+        "walk": 501,
+        "open": 12,
+        "quaff": 1,
+        "pickup": 4,
+        "wield": 2,
+        "ascend": 18,
+        "drop": 40,
+        "rest": 2,
+        "tunnel": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 7,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6043,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 3,
+      "gold": 146,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 18,
+        "walk": 559,
+        "open": 3,
+        "ascend": 18,
+        "quaff": 1,
+        "pickup": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 20,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6723,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 4,
+      "gold": 146,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 12,
+        "walk": 555,
+        "ascend": 11,
+        "open": 13,
+        "tunnel": 1,
+        "pickup": 4,
+        "wield": 1,
+        "quaff": 1,
+        "rest": 2
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 23,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6334,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 6,
+      "gold": 169,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 13,
+        "ascend": 12,
+        "walk": 557,
+        "open": 10,
+        "tunnel": 1,
+        "pickup": 2,
+        "quaff": 1,
+        "wield": 1,
+        "rest": 3
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 34,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 43,
+      "turns": 610,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 1,
+      "gold": 149,
+      "causeOfDeath": "grey mold",
+      "commands": {
+        "descend": 1,
+        "walk": 40,
+        "rest": 2,
+        "open": 1
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 42,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6030,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 3,
+      "gold": 208,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 16,
+        "ascend": 15,
+        "walk": 554,
+        "pickup": 4,
+        "wield": 1,
+        "open": 8,
+        "tunnel": 1,
+        "quaff": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 49,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 7888,
+      "maxDepth": 2,
+      "clvl": 2,
+      "kills": 14,
+      "gold": 187,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 13,
+        "walk": 522,
+        "ascend": 12,
+        "quaff": 1,
+        "pickup": 7,
+        "rest": 37,
+        "open": 7,
+        "wield": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 99,
+      "build": {
+        "race": "Dunadan",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 502,
+      "turns": 5600,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 6,
+      "gold": 184,
+      "causeOfDeath": "poison",
+      "commands": {
+        "descend": 6,
+        "walk": 477,
+        "ascend": 5,
+        "open": 7,
+        "quaff": 1,
+        "rest": 2,
+        "pickup": 4,
+        "wield": 1
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 1,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 307,
+      "turns": 3728,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 3,
+      "gold": 140,
+      "causeOfDeath": "crow",
+      "commands": {
+        "descend": 12,
+        "walk": 270,
+        "ascend": 10,
+        "open": 8,
+        "rest": 4,
+        "quaff": 2,
+        "read": 1,
+        "pickup": 1
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 7,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 7481,
+      "maxDepth": 2,
+      "clvl": 1,
+      "kills": 4,
+      "gold": 193,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 11,
+        "walk": 543,
+        "ascend": 10,
+        "open": 7,
+        "quaff": 1,
+        "rest": 3,
+        "pickup": 6,
+        "wield": 3,
+        "drop": 15,
+        "tunnel": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 20,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6063,
+      "maxDepth": 2,
+      "clvl": 2,
+      "kills": 7,
+      "gold": 189,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 9,
+        "walk": 561,
+        "open": 16,
+        "ascend": 8,
+        "pickup": 6
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 23,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 7230,
+      "maxDepth": 2,
+      "clvl": 1,
+      "kills": 2,
+      "gold": 215,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 9,
+        "walk": 560,
+        "open": 12,
+        "rest": 3,
+        "ascend": 8,
+        "pickup": 5,
+        "tunnel": 2,
+        "quaff": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 34,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 63,
+      "turns": 667,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 1,
+      "gold": 165,
+      "causeOfDeath": "grey mold",
+      "commands": {
+        "descend": 2,
+        "walk": 56,
+        "rest": 1,
+        "ascend": 1,
+        "open": 1,
+        "pickup": 2,
+        "read": 1
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 42,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6788,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 5,
+      "gold": 149,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 18,
+        "walk": 543,
+        "quaff": 1,
+        "rest": 5,
+        "ascend": 17,
+        "pickup": 2,
+        "open": 14
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 49,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6828,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 4,
+      "gold": 134,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 25,
+        "walk": 531,
+        "open": 9,
+        "ascend": 24,
+        "quaff": 1,
+        "rest": 5,
+        "tunnel": 1,
+        "pickup": 3,
+        "read": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 99,
+      "build": {
+        "race": "High-Elf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6007,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 6,
+      "gold": 155,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 17,
+        "walk": 561,
+        "ascend": 16,
+        "quaff": 1,
+        "open": 3,
+        "pickup": 1,
+        "rest": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 1,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 116,
+      "turns": 1169,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 1,
+      "gold": 152,
+      "causeOfDeath": "soldier ant",
+      "commands": {
+        "descend": 6,
+        "walk": 95,
+        "ascend": 5,
+        "quaff": 1,
+        "tunnel": 10
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 7,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 7392,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 4,
+      "gold": 137,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 21,
+        "ascend": 20,
+        "walk": 545,
+        "open": 8,
+        "quaff": 1,
+        "rest": 5
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 20,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 12143,
+      "maxDepth": 2,
+      "clvl": 2,
+      "kills": 9,
+      "gold": 170,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 14,
+        "walk": 506,
+        "ascend": 13,
+        "pickup": 9,
+        "wield": 1,
+        "quaff": 1,
+        "rest": 34,
+        "open": 10,
+        "tunnel": 12
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 23,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6095,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 2,
+      "gold": 174,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 25,
+        "ascend": 23,
+        "walk": 543,
+        "pickup": 3,
+        "open": 1,
+        "rest": 2,
+        "read": 1,
+        "quaff": 1,
+        "wield": 1
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 34,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 5965,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 1,
+      "gold": 175,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 19,
+        "walk": 535,
+        "pickup": 4,
+        "ascend": 19,
+        "quaff": 1,
+        "open": 3,
+        "drop": 19
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 42,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 600,
+      "turns": 6490,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 13,
+      "gold": 152,
+      "causeOfDeath": null,
+      "commands": {
+        "descend": 20,
+        "ascend": 19,
+        "walk": 545,
+        "quaff": 1,
+        "tunnel": 2,
+        "open": 11,
+        "pickup": 2
+      },
+      "deathDepth": null
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 49,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 359,
+      "turns": 4281,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 12,
+      "gold": 143,
+      "causeOfDeath": "wild dog",
+      "commands": {
+        "descend": 8,
+        "walk": 327,
+        "ascend": 7,
+        "quaff": 3,
+        "rest": 2,
+        "open": 9,
+        "pickup": 3,
+        "wield": 1
+      },
+      "deathDepth": 1
+    },
+    {
+      "variant": "patched-engine",
+      "seed": 99,
+      "build": {
+        "race": "Dwarf",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 340,
+      "turns": 4080,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 6,
+      "gold": 134,
+      "causeOfDeath": "kobold shaman",
+      "commands": {
+        "descend": 16,
+        "walk": 286,
+        "ascend": 15,
+        "quaff": 2,
+        "pickup": 2,
+        "open": 9,
+        "rest": 5,
+        "tunnel": 5,
+        "read": 1
+      },
+      "deathDepth": 1
+    }
+  ]
+}

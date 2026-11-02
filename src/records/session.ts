@@ -275,6 +275,13 @@ export interface SessionLife {
   readonly turns: number;
   /** Deepest depth the LIVE player says it reached. */
   readonly maxDepth: number;
+  /**
+   * The depth the live chunk carried when the run ended - the level a death
+   * happened on (0 = town), or where a survivor stood when its slice ran out.
+   * The bake-off's town-versus-dungeon death split reads this, never a guess
+   * from maxDepth (a warrior can die in town after visiting the dungeon).
+   */
+  readonly endDepth: number;
   /** Character level at end of run (the live player's). */
   readonly clvl: number;
   /** Monsters slain, from the game's own lore counters. */
@@ -457,6 +464,7 @@ export async function playWarriorSession(pack: GamePack, options: WarriorSession
       decisions: taken,
       turns: state.turn,
       maxDepth: state.actor.player.maxDepth,
+      endDepth: state.chunk.depth,
       clvl: state.actor.player.lev,
       kills: killsOf(state),
       gold: state.actor.player.au,

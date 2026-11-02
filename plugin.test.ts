@@ -72,6 +72,14 @@ describe("the built plugin.js", () => {
     expect(typeof built.armed).toBe("function");
   });
 
+  it("installs its controller with onDeath: \"end\", not the stock reincarnation", () => {
+    /* FORK: T04 (#7) - upstream's default rolls a random race and class on
+     * death, which is what this fork exists not to do. "end" runs the
+     * ordinary death and leaves the restart loop (src/loop/restart.ts) to
+     * start the next PLANNED warrior through the birth presenter. */
+    expect(built.onDeath).toBe("end");
+  });
+
   it("offers the keyboard only to a character handed to it", () => {
     /* Installing and enabling the Borg must not hand it your character. An
      * autoplayer that starts because the mod is present eats a save the first
@@ -152,11 +160,99 @@ describe("the built plugin.js", () => {
     expect(game.released).toHaveLength(1);
   });
 
-  it("listens for messages while it runs, and stops listening when the game stops it", async () => {
+  it("listens for messages and run reports while it runs, and stops listening when the game stops it", async () => {
     const game = await begin();
-    expect([...game.listeners.keys()]).toEqual(["message"]);
+    /* "run-end" is T04's restart loop joining the feed: the run report is
+     * the only thing that may trigger a create. */
+    expect([...game.listeners.keys()]).toEqual(["message", "run-end"]);
     await built.stop?.();
+    /* The bridge retires synchronously; the loop's retirement waits one
+     * microtask for its subscription handle to settle, so it lands second. */
+    expect(game.unsubscribed).toEqual(["message", "run-end"]);
+  });
+
+  it("restarts its dead warrior through the roster seam, once, flagged first", async () => {
+    /* T04's loop, driven through the BUILT bundle the way the host drives
+     * it: the game delivers the run report, the mod answers. The flag is
+     * set in the install slot BEFORE the create fires, the create asks for
+     * exactly resumeAutoplayer (never `like`), and the slot keeps the
+     * title row's sibling key - the shared-slot contract (#26). */
+    const game = await begin();
+    const report = { key: "cedar", report: { outcome: "death", cause: "a novice mage", maxDepth: 3, turn: 99 } };
+    game.listeners.get("run-end")?.(report as never);
+    for (let i = 0; i < 32; i++) await Promise.resolve();
+    expect(game.created).toEqual([{ resumeAutoplayer: true }]);
+    /* The slot's whole contents at rest: the flag standing for the next
+     * page's presenter (a fresh fake slot had no siblings to keep). */
+    expect(game.installSlot.value).toEqual({ warriorBirth: true });
+  });
+
+  it("starts nothing at a death it did not drive, and nothing without the roster seam", async () => {
+    const drivenByOther = await begin({ ownsKeyboard: false });
+    drivenByOther.listeners.get("run-end")?.({ key: "cedar", report: { outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
+    for (let i = 0; i < 32; i++) await Promise.resolve();
+    expect(drivenByOther.created).toEqual([]);
+    expect(drivenByOther.installSlot.value).toBeNull();
+
+    const noSeam = await begin({ saves: "absent" });
+    noSeam.listeners.get("run-end")?.({ key: "cedar", report: { outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
+    for (let i = 0; i < 32; i++) await Promise.resolve();
+    expect(noSeam.created).toEqual([]);
+    expect(noSeam.installSlot.value).toBeNull();
+    expect(said(noSeam)).toContain("no character-creation seam");
+  });
+
+  it("installs nothing from a start that was stopped while still starting", async () => {
+    /* #30's shape: stop() lands while begin() is still awaiting its
+     * bridge's prime, so no restart handle exists for the stop to retire.
+     * The installation epoch must abort the start at its checkpoint: no
+     * title row, no restart listener, and the late death report the review
+     * reproduced reaches nothing. */
+    const game = fakeGame({ engine: engine(NOSCORE_BORG), scenario: FIGHT });
+    started.push(game);
+    const pending = built.start!(game.mod);
+    built.stop!();
+    await pending;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(game.listeners.has("run-end")).toBe(false);
+    game.listeners.get("run-end")?.({ key: "cedar", report: { outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(game.created).toEqual([]);
+    expect(game.installSlot.value).toBeNull();
+    expect(said(game)).toContain("installed nothing");
+    /* The aborted start's bridge is disposed too: the message listener its
+     * prime subscribed leaves with it. */
     expect(game.unsubscribed).toEqual(["message"]);
+  });
+
+  it("lets a fresh start install after a stop, and stops a stale older start from disturbing it", async () => {
+    /* #30's second requirement: start A is stopped mid-start, start B
+     * installs normally, and A then resolves late - A must install nothing
+     * AND must not stop or replace B's loop (B's death report still
+     * restarts through it after A has finished). */
+    const gameA = fakeGame({ engine: engine(NOSCORE_BORG), scenario: FIGHT });
+    started.push(gameA);
+    const gameB = fakeGame({ engine: engine(NOSCORE_BORG), scenario: FIGHT });
+    started.push(gameB);
+
+    const a = built.start!(gameA.mod);
+    built.stop!();
+    await built.start!(gameB.mod); /* the fresh start installs normally */
+    await a; /* the older, stopped start resolves late: aborts */
+
+    expect(gameA.listeners.has("run-end")).toBe(false);
+    expect(gameB.listeners.has("run-end")).toBe(true);
+
+    /* The newer loop is still the live one: a death restarts through it. */
+    gameB.listeners.get("run-end")?.({ key: "cedar", report: { outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
+    for (let i = 0; i < 32; i++) await Promise.resolve();
+    expect(gameB.created).toEqual([{ resumeAutoplayer: true }]);
+
+    /* And the older game's bus has no listener at all. */
+    gameA.listeners.get("run-end")?.({ key: "cedar", report: { outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
+    for (let i = 0; i < 32; i++) await Promise.resolve();
+    expect(gameA.created).toEqual([]);
   });
 
   it("makes only the two hidden reads it declares, and never the real map or the stock", async () => {

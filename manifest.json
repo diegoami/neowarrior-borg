@@ -33,6 +33,7 @@
       "input:intent",
       "input:prompt.reply",
       "event:message",
+      "event:run-end",
       "ui:title",
       "ui:birth.replace",
       "profiles:manage",

@@ -32,15 +32,21 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  BIRTH_STAT_BASE,
+  BIRTH_STAT_COSTS,
   ContentIdResolver,
   LOOP_STATUS,
+  MAX_BIRTH_POINTS,
+  bindPlayer,
   installController,
   runGameLoop,
   startGame,
 } from "@rpgm-tools/neo-angband-core";
-import type { GamePack, GameState } from "@rpgm-tools/neo-angband-core";
+import type { GamePack, GameState, StartedGame } from "@rpgm-tools/neo-angband-core";
 import { createBorg } from "./controller.js";
 import { makeCoreResolvers } from "./resolvers.js";
+import { ladderFromCostTable, planWarriorBirth, WARRIOR_CLASS_NAME, type WarriorBuildPlan } from "./birth/plan.js";
+import { WARRIOR_BIRTH_RACE_PLACEHOLDER } from "../plugin.js";
 
 /** The game's checkout, holding the content pack a real boot needs. */
 function packRoot(): string | null {
@@ -400,4 +406,243 @@ suite("the Borg plays a real game", () => {
     expect(r.commands["descend"] ?? 0).toBeGreaterThan(0);
     expect(r.commands["ascend"] ?? 0).toBeGreaterThan(0);
   }, 120_000);
+});
+
+/* ==================================================================
+ * THE WARRIOR RESTART LOOP, HEADLESS (T04, #7)
+ * ==================================================================
+ *
+ * The mod's loop runs through host seams this harness does not have - no web
+ * shell, no page to reload, no roster - so the loop is APPROXIMATED the way
+ * docs/tasks/T04.md specifies: when a warrior dies, the next character is
+ * booted by the same plan (planWarriorBirth) the T03 presenter replays, with
+ * startGame({ roller: "point", birthStats }) standing in for
+ * saves.create({ resumeAutoplayer: true }) + the presenter + the reload.
+ * What that keeps faithful is the part the task cares about: the BUILD is
+ * the presenter's build (one plan module, both callers), and every assertion
+ * about it is made against the LIVE player the engine just birthed, never
+ * against our own bookkeeping.
+ *
+ * WHY statBirth IS THE PINNED FIELD. generatePlayer threads the point-buy
+ * through reset_stats + buy_stat and stores the result as the natural stats
+ * BEFORE race and class adjustments are folded in (packages/core/src/player/
+ * birth.ts: statMax = statCur = statBirth = the buy), which is exactly the
+ * plan's baseStats semantics. statBirth is that array FROZEN AT BIRTH: play
+ * moves statCur (drains, restoration) and statMax (gain potions, drains),
+ * but nothing in play rewrites statBirth, so a level-5 warrior who found
+ * three gain-strength potions still shows the allocation it was born with.
+ * Asserting it at the first moment after startGame - before a single
+ * decision - pins the birth itself rather than anything a level-up could
+ * confound; asserting it after a whole life would still be true, which is
+ * the point of choosing it.
+ */
+suite("the warrior restart loop, headless", () => {
+  const pack = PACK_DIR ? loadPack(PACK_DIR) : null;
+  const engineReady = pack ? engineSeparatesDoorLocksFromTraps(pack) : false;
+  const when = engineReady ? it : it.skip;
+
+  /**
+   * The plan the presenter replays, computed exactly as plugin.ts wires it:
+   * the same module, the published engine's own cost table and point budget,
+   * the placeholder race. This is the ONE plan both callers share; a
+   * disagreement between the harness's warrior and the presenter's is a bug
+   * in one of them, not a choice each makes.
+   */
+  function warriorBuildPlan(): WarriorBuildPlan {
+    const players = bindPlayer(pack!.player);
+    return planWarriorBirth({
+      catalogue: {
+        races: players.races.map((race) => ({ name: race.name, statAdj: race.statAdj })),
+        classes: players.classes.map((cls) => ({ name: cls.name, statAdj: cls.statAdj })),
+        stats: ["STR", "INT", "WIS", "DEX", "CON"],
+        pointBudget: MAX_BIRTH_POINTS,
+      },
+      raceName: WARRIOR_BIRTH_RACE_PLACEHOLDER,
+      costs: ladderFromCostTable(BIRTH_STAT_COSTS, BIRTH_STAT_BASE),
+    });
+  }
+
+  /** What one warrior's life shows, in the terms the loop cares about. */
+  interface WarriorLife {
+    readonly seed: number;
+    /** Whether the warrior died (the event that boots the next one). */
+    readonly dead: boolean;
+    readonly decisions: number;
+    readonly turns: number;
+    /** The deepest dungeon level the LIVE player says it reached. */
+    readonly deepest: number;
+    /** The cause of death, as the player's own died_from carries it. */
+    readonly cause: string | null;
+  }
+
+  /**
+   * Boot one planned warrior and assert its build FROM THE LIVE PLAYER, at
+   * the first moment the player exists - before a single decision, so no
+   * level-up or drain can confound the check. This is the whole "the loop
+   * rebirths the SAME warrior" claim: if the engine birthed anything else,
+   * these three expectations fail on that character, not on an aggregate.
+   */
+  function bootPlannedWarrior(seed: number, plan: WarriorBuildPlan): StartedGame {
+    const game = startGame(pack!, {
+      seed,
+      depth: 0,
+      raceName: plan.raceName,
+      className: WARRIOR_CLASS_NAME,
+      roller: "point",
+      birthStats: [...plan.baseStats],
+    });
+    const born = game.state.actor.player;
+    expect(born.race.name, `warrior on seed ${String(seed)} was born the wrong race`).toBe(plan.raceName);
+    expect(born.cls.name, `warrior on seed ${String(seed)} was born the wrong class`).toBe(WARRIOR_CLASS_NAME);
+    expect(
+      [...born.statBirth],
+      `warrior on seed ${String(seed)} was born with stats it was not planned with`,
+    ).toEqual([...plan.baseStats]);
+    return game;
+  }
+
+  /** One warrior: boot (asserted), play to its death or the decision cap. */
+  function playWarriorLife(seed: number, plan: WarriorBuildPlan, decisions: number): WarriorLife {
+    const game = bootPlannedWarrior(seed, plan);
+    const state: GameState = game.state;
+    const resolver = new ContentIdResolver({
+      objects: game.booted.registries.objects,
+      playerRaces: game.players.races,
+      playerClasses: game.players.classes,
+    });
+    const borg = createBorg({
+      /* The Borg's private stream, varied with the game seed exactly as
+       * playRun varies it: the chain of warriors must not share one draw
+       * sequence either. */
+      rngSeed: (seed * 2654435761) >>> 0 || 1,
+      resolvers: makeCoreResolvers({
+        races: game.booted.registries.monsters.races,
+        objects: game.booted.registries.objects,
+        state: state as never,
+        blowMethods: game.booted.registries.monsters.blowMethods.values(),
+      }),
+    });
+
+    /* The latch, as in playRun: runGameLoop asks nextCommand for as long as
+     * the player has energy, so a controller that always answers never lets
+     * the loop return. */
+    let armed = false;
+    installController(
+      state,
+      (view, act) => {
+        if (!armed) return null;
+        armed = false;
+        return borg.controller(view, act);
+      },
+      { viewDeps: { resolver, reg: game.booted.registries.objects } },
+    );
+
+    let dead = false;
+    let taken = 0;
+    for (; taken < decisions; taken++) {
+      armed = true;
+      const status = runGameLoop(state, game.registry);
+      if (status === LOOP_STATUS.DEAD) {
+        dead = true;
+        break;
+      }
+      if (status === LOOP_STATUS.DEATH_CONFIRM) {
+        state.pendingDeath?.resolve(true);
+        continue;
+      }
+      if (status === LOOP_STATUS.LEVEL_CHANGE) {
+        game.changeLevel(state.targetDepth ?? state.chunk.depth + 1);
+        state.generateLevel = false;
+      }
+    }
+
+    return {
+      seed,
+      dead,
+      decisions: taken,
+      turns: state.turn,
+      deepest: state.actor.player.maxDepth,
+      cause: dead ? state.actor.player.diedFrom : null,
+    };
+  }
+
+  /**
+   * Run the loop's chain over `seeds`, the way the loop itself sequences:
+   * the next warrior boots ONLY behind an explicit assertion that its
+   * predecessor DIED (#31 - three deaths anywhere among four lives do not
+   * prove a chain; an interior survivor splits it into two shorter chains,
+   * and the real loop, which sequences on LOOP_STATUS.DEAD, would simply
+   * never have booted the next one). Every boot asserts the planned build
+   * from the live player inside bootPlannedWarrior.
+   */
+  function chainPlannedWarriors(plan: WarriorBuildPlan, seeds: readonly number[], capFor: (seed: number) => number): WarriorLife[] {
+    const lives: WarriorLife[] = [];
+    for (const seed of seeds) {
+      const previous = lives[lives.length - 1];
+      if (previous !== undefined) {
+        expect(
+          previous.dead,
+          `warrior on seed ${String(previous.seed)} was still alive after its session slice, ` +
+            `so the restart loop would never have booted seed ${String(seed)}`,
+        ).toBe(true);
+      }
+      lives.push(playWarriorLife(seed, plan, capFor(seed)));
+    }
+    return lives;
+  }
+
+  when("plays a session of consecutive planned warriors, each reborn on the last one's death", () => {
+    const plan = warriorBuildPlan();
+    /* The plan is what T02's walk makes of the stock table: STR 18, CON 17,
+     * the rest at base, no points left - asserted here rather than assumed,
+     * because the session's meaning depends on it. */
+    expect(plan.raceName).toBe(WARRIOR_BIRTH_RACE_PLACEHOLDER);
+    expect(plan.baseStats).toEqual([18, 10, 10, 10, 17]);
+    expect(plan.pointsLeft).toBe(0);
+
+    /* THE SESSION: boot warriors in a chain, each behind its predecessor's
+     * death, exactly as the loop's create would. The seeds are pinned (the
+     * engine is deterministic): probed on the pinned engine, each of these
+     * warriors dies on depth 1 inside 369 decisions (grey mold, a
+     * centipede, a floating eye, a wild dog - a level-1 warrior meeting
+     * something it cannot see is upstream's own outcome), so the
+     * 600-decision cap carries 230 decisions of margin. */
+    const lives = chainPlannedWarriors(plan, [20, 23, 34, 49], () => 600);
+
+    /* Every boot already asserted its build from the live player (inside
+     * bootPlannedWarrior), and every boot except the first was gated on its
+     * predecessor's death (inside chainPlannedWarriors); reaching this line
+     * means four consecutive planned warriors were joined by deaths. What
+     * remains is the count: at least three deaths among the four. */
+    expect(lives).toHaveLength(4);
+    const deaths = lives.filter((life) => life.dead);
+    expect(
+      deaths.length,
+      `the session buried ${String(deaths.length)} of ${String(lives.length)} warriors ` +
+        `(${lives.map((life) => `${String(life.seed)}:${life.dead ? `died to ${life.cause ?? "?"} after ${String(life.decisions)} decisions` : `survived ${String(life.decisions)} decisions`}`).join(", ")})`,
+    ).toBeGreaterThanOrEqual(3);
+  }, 300_000);
+
+  when("refuses to boot the next warrior behind one that survived its slice", () => {
+    /* #31's guard, proven on the reviewer's probe shape: a middle life
+     * capped to a single decision survives, the chain's death gate must
+     * refuse to boot its successor, and the session must fail rather than
+     * count the other lives' deaths into a chain that was broken. Seed 20
+     * still plays its full short life so the survivor really is interior. */
+    const plan = warriorBuildPlan();
+    expect(() => chainPlannedWarriors(plan, [20, 23, 34], (seed) => (seed === 23 ? 1 : 600))).toThrow(
+      /seed 23 was still alive after its session slice/u,
+    );
+  }, 300_000);
+
+  when("births the planned warrior on every seed it is asked to", () => {
+    /* The chain above pins four seeds; this sweeps a wider set cheaply
+     * (boot-and-assert only, no play), so a pack or engine change that
+     * quietly broke the birth - a renamed race, a moved table - fails on
+     * many seeds at once instead of on whichever four the session uses. */
+    const plan = warriorBuildPlan();
+    for (const seed of [1, 7, 13, 42, 77, 99]) {
+      bootPlannedWarrior(seed, plan);
+    }
+  }, 60_000);
 });

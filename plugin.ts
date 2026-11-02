@@ -68,6 +68,7 @@ import { createBridge, type Bridge } from "./src/api2/host.js";
 import { createTick, type Tick } from "./src/api2/controller.js";
 import { BORG_MARK, BORG_VIEW } from "./src/world/grid.js";
 import { createWarriorBirthPresenter } from "./src/birth/presenter.js";
+import { installWarriorRestart, type WarriorRestart } from "./src/loop/restart.js";
 
 /**
  * Whether this character has already handed the keyboard to an autoplayer.
@@ -211,14 +212,19 @@ function changedFrom(cfg: Partial<BorgCfg>): string[] {
 interface Running {
   readonly bridge: Bridge;
   readonly tick: Tick;
+  /** FORK: T04 (#7) - the restart loop, so a stop can retire it with the bridge. */
+  readonly restart: WarriorRestart;
 }
 
 /**
  * FORK: T03 (#6) - the race the birth presenter plans for, until T05's
  * `raceChoice` setting replaces this constant with the setting's resolver.
  * Candidate 0 of the bake-off shortlist (docs/tasks/T05.md): Half-Troll.
+ * Exported because T04's headless harness (src/play.test.ts) must boot the
+ * SAME race the presenter births - the loop's whole claim is that every
+ * character in a session is this one.
  */
-const WARRIOR_BIRTH_RACE_PLACEHOLDER = "Half-Troll";
+export const WARRIOR_BIRTH_RACE_PLACEHOLDER = "Half-Troll";
 
 /**
  * FORK: T03 (#6) - the presenter under `ui:birth.replace` (already declared in
@@ -251,13 +257,37 @@ function warriorBirth(mod: ModApi2): Api2BirthPresenter | undefined {
 
 let bridge: Bridge | undefined;
 let running: Promise<Running | null> | undefined;
+/* FORK: T04 (#7) - the restart loop's handle, retired in stop() with the bridge. */
+let restartHandle: WarriorRestart | undefined;
+/**
+ * FORK: T04 fixes (#30) - the installation epoch. stop() bumps it
+ * SYNCHRONOUSLY; a begin that was still starting when stop ran finds the
+ * epoch it captured stale at its checkpoint and installs NOTHING - no title
+ * row, no restart listener, no handles published - disposing the bridge it
+ * made. A begin that starts AFTER a stop captures the bumped epoch and
+ * installs normally: stop retires starts in flight, it does not forbid new
+ * ones, and a stopped older start resolving late must not disturb whatever
+ * a newer start installed.
+ */
+let startEpoch = 0;
 
 async function begin(mod: ModApi2): Promise<Running | null> {
+  /* FORK: T04 fixes (#30) - captured before this start's first await, so a
+   * stop landing while it is still starting invalidates it. */
+  const mine = startEpoch;
   /* A start always gets a bridge of its own, so a second start on the same page reads this game and never the one before it. */
   void bridge?.dispose();
   const made = createBridge(mod);
   bridge = made;
   await made.prime();
+  if (mine !== startEpoch) {
+    /* Stopped mid-start (#30): dispose what THIS start made and publish
+     * nothing - its own bridge only, because the module-level handles may
+     * already belong to a newer start and must not be touched from here. */
+    mod.meta.log("the Borg's start was stopped before it finished, so it installed nothing");
+    void made.dispose();
+    return null;
+  }
   const cfg = cfgFromFlags(mod.meta.flags);
   /* Cross-mod, deliberately outside RULE_CFG and cfg itself: see
    * config.ts's setBuffTimerSafetyNet for why. */
@@ -286,7 +316,28 @@ async function begin(mod: ModApi2): Promise<Running | null> {
     grid.feat = 0;
     grid.info &= ~(BORG_MARK | BORG_VIEW);
   };
-  return { bridge: made, tick: createTick(made, { controller: borg.controller, rewind: borg.rewind, forget }) };
+  /* FORK: T04 (#7) - the restart loop. Every piece is a slice of this mod's
+   * own context: the install slot the birth flag lives in, the log, the
+   * keyboard-ownership question, the roster's create (absent on a host that
+   * gives this mod no manage seam - the loop says so and the run ends at its
+   * death), and the event domain the run report arrives on. The protocol it
+   * implements - death, report, flag, create, reload, presenter, armed
+   * controller - and every failure mode's landing place are documented in
+   * src/loop/restart.ts. */
+  const restart = installWarriorRestart({
+    slot: mod.store.install,
+    log: (message) => mod.meta.log(message),
+    ownsKeyboard: () => mod.act.controller.owns(),
+    create: mod.manage?.saves.create ?? null,
+    events: mod.events,
+  });
+  /* Module-level so stop() can retire it even before `running` settles, and
+   * retired here the same way the bridge is, so a second start on the same
+   * page (a start without a stop) never leaves two loops listening for one
+   * report. */
+  void restartHandle?.stop();
+  restartHandle = restart;
+  return { bridge: made, tick: createTick(made, { controller: borg.controller, rewind: borg.rewind, forget }), restart };
 }
 
 const definition: Api2ModDefinition = {
@@ -296,6 +347,18 @@ const definition: Api2ModDefinition = {
    * ui:birth.replace. Flag-gated: without the flag the presenter declines and
    * the game's own birth screens run as before. See warriorBirth above. */
   birth: (mod) => warriorBirth(mod),
+
+  /* FORK: T04 (#7) - the controller installs with onDeath: "end", not
+   * upstream's default "reincarnate". Upstream's reincarnation starts the
+   * next character in place with a RANDOM race and class and roller stats -
+   * exactly what this fork exists not to do. "end" runs the ordinary death
+   * (tombstone, score entry, run report) and leaves this controller
+   * installed until the page reloads, which is the moment our own restart
+   * loop takes over: it hears the run report, sets T03's birth flag, and
+   * calls saves.create({ resumeAutoplayer: true }) so the reload lands in
+   * birth with the presenter's planned warrior and this controller armed on
+   * it (src/loop/restart.ts owns the protocol and its failure modes). */
+  onDeath: "end",
 
   async start(mod) {
     running = begin(mod).catch((error: unknown) => {
@@ -307,9 +370,22 @@ const definition: Api2ModDefinition = {
 
   /* The game tears its mods down before it reloads, and the headless runner registers them again on the same page after a save and reload. The message listener leaves the game here, or the second registration doubles every message. */
   stop() {
+    /* FORK: T04 fixes (#30) - invalidate every start still in flight,
+     * synchronously, before any teardown: a begin suspended in its bridge's
+     * prime will find its epoch stale at the checkpoint and install
+     * nothing, instead of installing a live restart listener into a mod the
+     * host has already stopped. */
+    startEpoch += 1;
     running = undefined;
     const held = bridge;
     bridge = undefined;
+    /* FORK: T04 (#7) - the restart loop's run-report listener leaves with
+     * the rest, for the same reason: a re-registration on the same page
+     * must not leave two loops listening for one report. Torn down before
+     * the bridge (reverse of begin's order). */
+    const loop = restartHandle;
+    restartHandle = undefined;
+    void loop?.stop();
     void held?.dispose();
   },
 

@@ -116,6 +116,30 @@ export async function setWarriorBirthFlag(slot: Slot): Promise<boolean> {
   return written !== undefined && written.ok;
 }
 
+/**
+ * Durably clear the one-shot birth flag, preserving the slot's other keys, and
+ * prove it gone by reading the slot again - the same verified standard the
+ * prepare's consume holds itself to (a slot answers ok to a set whose backing
+ * write was swallowed, #25, so only the read-back proves anything). For T04's
+ * restart loop (src/loop/restart.ts), on the one path where it set the flag
+ * and then could not leave the page: a flag left standing would take the NEXT
+ * birth on any later reload, whoever started it. A flag that is already gone
+ * counts as cleared - the read itself is the proof.
+ */
+export async function clearWarriorBirthFlag(slot: Slot): Promise<boolean> {
+  try {
+    const current = await slot.get();
+    if (!current.ok) return false;
+    if (!flagIsSet(current.value)) return true;
+    const written = await slot.set(withoutFlag(current.value));
+    if (!written.ok) return false;
+    const check = await slot.get();
+    return check.ok && !flagIsSet(check.value);
+  } catch {
+    return false;
+  }
+}
+
 /** What the presenter needs: the slot, a voice, the race, the cost table. */
 export interface WarriorBirthDeps {
   /** The mod's install slot (mod.store.install), flag and siblings alike. */

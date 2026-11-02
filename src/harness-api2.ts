@@ -38,6 +38,18 @@ export interface FakeGameOptions {
   readonly engine?: unknown;
   readonly noscore?: number;
   readonly armed?: boolean;
+  /**
+   * Whether this mod's controller holds the keyboard when asked
+   * (act.controller.owns). Default true: the fake's driver is the mod.
+   */
+  readonly ownsKeyboard?: boolean;
+  /**
+   * Whether the game hands the mod the roster seam at all
+   * (manage.saves.create). Default present, as for a game that granted the
+   * manifest's saves:manage; "absent" models a host that gives this mod no
+   * manage domain.
+   */
+  readonly saves?: "ok" | "refused" | "absent";
   /** How `act.submit` answers a command. Default: accepts everything. */
   readonly submit?: (intent: Api2Intent) => boolean;
 }
@@ -54,6 +66,8 @@ export interface FakeGame {
   readonly listeners: Map<string, (payload: never) => void>;
   readonly unsubscribed: string[];
   readonly installSlot: { value: unknown };
+  /** The create options the mod passed the roster seam, if it ever did. */
+  readonly created: unknown[];
   /** The input wait the game would hand the controller. */
   input(over?: Partial<Api2InputState>): Api2InputState;
 }
@@ -151,6 +165,7 @@ export function fakeGame(options: FakeGameOptions = {}): FakeGame {
   const listeners = new Map<string, (payload: never) => void>();
   const unsubscribed: string[] = [];
   const installSlot = { value: null as unknown };
+  const created: unknown[] = [];
   const noscore = options.noscore ?? 0;
 
   const input = (over: Partial<Api2InputState> = {}): Api2InputState =>
@@ -195,7 +210,10 @@ export function fakeGame(options: FakeGameOptions = {}): FakeGame {
         answered.push({ promptId, answer });
         return ok(null);
       },
-      controller: { release: (reason: string) => { released.push(reason); return ok(null); } },
+      controller: {
+        owns: () => ok(options.ownsKeyboard ?? true),
+        release: (reason: string) => { released.push(reason); return ok(null); },
+      },
     },
     events: {
       on: (name: string, listener: (payload: never) => void) => {
@@ -212,9 +230,26 @@ export function fakeGame(options: FakeGameOptions = {}): FakeGame {
       activation: () => ok(null),
     },
     store: { install: { get: () => ok(installSlot.value), set: (value: unknown) => { installSlot.value = value; return ok(null); } } },
+    /* The roster seam (manage.saves), present by default as for a game that
+     * granted saves:manage. "absent" leaves the whole manage domain off, the
+     * way a host that gives this mod no first-party seam does. */
+    ...((options.saves ?? "ok") === "absent"
+      ? {}
+      : {
+          manage: {
+            saves: {
+              create: (request: unknown) => {
+                created.push(request);
+                return (options.saves === "refused"
+                  ? refused("the roster is busy")
+                  : ok(null)) as ReturnType<NonNullable<ModApi2["manage"]>["saves"]["create"]>;
+              },
+            },
+          },
+        }),
     ...(truth === undefined ? {} : { truth }),
   } as unknown as ModApi2;
 
   void (null as unknown as LoadoutSimulation);
-  return { mod, view, logs, submitted, answered, released, truthCalls, listeners, unsubscribed, installSlot, input };
+  return { mod, view, logs, submitted, answered, released, truthCalls, listeners, unsubscribed, installSlot, created, input };
 }

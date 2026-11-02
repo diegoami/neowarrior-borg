@@ -16792,6 +16792,25 @@ function withoutFlag(value) {
   }
   return any ? kept : null;
 }
+async function setWarriorBirthFlag(slot) {
+  const current = await slot.get().catch(() => null);
+  const base = current !== null && current.ok && current.value !== null && typeof current.value === "object" && !Array.isArray(current.value) ? current.value : {};
+  const written = await slot.set({ ...base, [BIRTH_FLAG_KEY]: true }).catch(() => void 0);
+  return written !== void 0 && written.ok;
+}
+async function clearWarriorBirthFlag(slot) {
+  try {
+    const current = await slot.get();
+    if (!current.ok) return false;
+    if (!flagIsSet(current.value)) return true;
+    const written = await slot.set(withoutFlag(current.value));
+    if (!written.ok) return false;
+    const check = await slot.get();
+    return check.ok && !flagIsSet(check.value);
+  } catch {
+    return false;
+  }
+}
 var PENDING = { state: "pending" };
 var messageOf = (error) => error instanceof Error ? error.message : String(error);
 function createWarriorBirthPresenter(deps) {
@@ -16892,6 +16911,144 @@ function createWarriorBirthPresenter(deps) {
   };
 }
 
+// src/loop/restart.ts
+var messageOf2 = (error) => error instanceof Error ? error.message : String(error);
+async function flagIsDurable(slot) {
+  try {
+    const read = await slot.get();
+    if (!read.ok) return false;
+    const value = read.value;
+    return value !== null && typeof value === "object" && !Array.isArray(value) && value[BIRTH_FLAG_KEY] === true;
+  } catch {
+    return false;
+  }
+}
+function installWarriorRestart(deps) {
+  let subscription = null;
+  let spent = false;
+  let stopped = false;
+  let epoch = 0;
+  const stranded = async (why) => {
+    const cleared = await clearWarriorBirthFlag(deps.slot);
+    if (cleared) {
+      deps.log(
+        `the Borg could not start the next warrior (${why}); the birth flag was cleared and this run ends here rather than loop`
+      );
+      return;
+    }
+    deps.log(
+      `the Borg could not start the next warrior (${why}) AND could not durably clear its birth flag: the flag may still be set, and the next character created after any later reload would be born as the Borg's planned warrior. The presenter still consumes-or-declines it on that page, but a human's birth could be taken once - clear the mod's install storage before letting anyone create a character here`
+    );
+  };
+  const onReport = async (event) => {
+    if (stopped) return;
+    const mine = epoch;
+    const retired = () => stopped || mine !== epoch;
+    const dropped = (where) => {
+      deps.log(`the Borg's restart loop was retired while a run report was still in flight (${where}), so the report is dropped`);
+    };
+    const retireWrittenFlag = async () => {
+      const cleared = await clearWarriorBirthFlag(deps.slot);
+      if (cleared) {
+        deps.log("the Borg's restart loop was retired after a report had written the birth flag; the flag was cleared and no next warrior is started");
+        return;
+      }
+      deps.log(
+        "the Borg's restart loop was retired after a report had written the birth flag, AND the flag could not be durably cleared: the flag may still be set, and the next character created after any later reload would be born as the Borg's planned warrior. The presenter still consumes-or-declines it on that page, but a human's birth could be taken once - clear the mod's install storage before letting anyone create a character here"
+      );
+    };
+    if (spent) {
+      deps.log("a second run report reached the Borg on this page; it restarts at most one warrior per reload, so it ignores this one");
+      return;
+    }
+    spent = true;
+    const report = event.report;
+    if (report === null) {
+      deps.log(
+        "the Borg's run ended but this game would not say how (no run report), so it starts no next warrior: a victory or retirement must not be buried under a restart"
+      );
+      return;
+    }
+    const diedAt = `on depth ${String(report.maxDepth)} at turn ${String(report.turn)} (${report.cause})`;
+    if (report.outcome !== "death") {
+      const endedAs = report.outcome === "winner" ? "victory" : "retirement";
+      deps.log(
+        `the Borg's run ended in ${endedAs} ${diedAt}; the session ends here - no next warrior is started (an owner who wants the loop to roll on past a victory flips this check in src/loop/restart.ts)`
+      );
+      return;
+    }
+    let holds = false;
+    try {
+      const owned = await deps.ownsKeyboard();
+      if (retired()) return dropped("it was still asking who holds the keyboard");
+      holds = owned.ok && owned.value === true;
+      if (!owned.ok) {
+        deps.log(`the Borg could not ask who holds the keyboard (${owned.message}), so it starts no next warrior`);
+      }
+    } catch (error) {
+      if (retired()) return dropped("its keyboard question had thrown");
+      deps.log(`the Borg could not ask who holds the keyboard (${messageOf2(error)}), so it starts no next warrior`);
+    }
+    if (!holds) {
+      deps.log(`the Borg's warrior died ${diedAt}, but the Borg was not the one holding the keyboard, so it starts nothing`);
+      return;
+    }
+    if (deps.create === null) {
+      deps.log(`the Borg's warrior died ${diedAt}, but this game gives it no character-creation seam, so the run ends here`);
+      return;
+    }
+    const written = await setWarriorBirthFlag(deps.slot);
+    const standing = written && await flagIsDurable(deps.slot);
+    if (retired()) {
+      if (standing) await retireWrittenFlag();
+      else dropped("it had not durably written its birth flag");
+      return;
+    }
+    if (!standing) {
+      await stranded(written ? "the birth flag would not verify after being written" : "the birth flag's write was refused");
+      return;
+    }
+    deps.log(`the Borg's warrior died ${diedAt}; the Borg is starting the next one`);
+    try {
+      const made = await deps.create({ resumeAutoplayer: true });
+      if (made.ok) return;
+      await stranded(`create was refused: ${made.message}`);
+    } catch (error) {
+      await stranded(`create threw: ${messageOf2(error)}`);
+    }
+  };
+  const subscribed = deps.events.on("run-end", (event) => {
+    void onReport(event);
+  }).then(
+    (result) => {
+      if (result.ok) {
+        subscription = result.value;
+      } else {
+        deps.log(`the Borg cannot hear how its runs end (${result.message}), so a death ends the session`);
+      }
+    },
+    (error) => {
+      deps.log(`the Borg cannot hear how its runs end (${messageOf2(error)}), so a death ends the session`);
+    }
+  );
+  if (deps.create === null) {
+    deps.log("the Borg cannot restart its warrior on this game: it was given no character-creation seam, so a death will end the session");
+  }
+  return {
+    get listening() {
+      return subscription !== null;
+    },
+    async stop() {
+      stopped = true;
+      epoch += 1;
+      await subscribed;
+      const held = subscription;
+      subscription = null;
+      if (held !== null) await deps.events.off(held).catch(() => void 0);
+    }
+  };
+}
+
 // plugin.ts
 function characterAlreadyAutoplayed(context) {
   const state = context.engine?.state;
@@ -16937,11 +17094,19 @@ function warriorBirth(mod2) {
 }
 var bridge;
 var running;
+var restartHandle;
+var startEpoch = 0;
 async function begin(mod2) {
+  const mine = startEpoch;
   void bridge?.dispose();
   const made = createBridge(mod2);
   bridge = made;
   await made.prime();
+  if (mine !== startEpoch) {
+    mod2.meta.log("the Borg's start was stopped before it finished, so it installed nothing");
+    void made.dispose();
+    return null;
+  }
   const cfg = cfgFromFlags(mod2.meta.flags);
   setBuffTimerSafetyNet(mod2.meta.flags["bugfix.borgFixes"] ?? true);
   const borg = createBorg({ resolvers: makeCoreResolvers(made.resolverInput()), cfg });
@@ -16965,7 +17130,16 @@ async function begin(mod2) {
     grid.feat = 0;
     grid.info &= ~(BORG_MARK | BORG_VIEW);
   };
-  return { bridge: made, tick: createTick(made, { controller: borg.controller, rewind: borg.rewind, forget }) };
+  const restart = installWarriorRestart({
+    slot: mod2.store.install,
+    log: (message) => mod2.meta.log(message),
+    ownsKeyboard: () => mod2.act.controller.owns(),
+    create: mod2.manage?.saves.create ?? null,
+    events: mod2.events
+  });
+  void restartHandle?.stop();
+  restartHandle = restart;
+  return { bridge: made, tick: createTick(made, { controller: borg.controller, rewind: borg.rewind, forget }), restart };
 }
 var definition = {
   api: ">=2.0.0 <3.0.0",
@@ -16973,6 +17147,17 @@ var definition = {
    * ui:birth.replace. Flag-gated: without the flag the presenter declines and
    * the game's own birth screens run as before. See warriorBirth above. */
   birth: (mod2) => warriorBirth(mod2),
+  /* FORK: T04 (#7) - the controller installs with onDeath: "end", not
+   * upstream's default "reincarnate". Upstream's reincarnation starts the
+   * next character in place with a RANDOM race and class and roller stats -
+   * exactly what this fork exists not to do. "end" runs the ordinary death
+   * (tombstone, score entry, run report) and leaves this controller
+   * installed until the page reloads, which is the moment our own restart
+   * loop takes over: it hears the run report, sets T03's birth flag, and
+   * calls saves.create({ resumeAutoplayer: true }) so the reload lands in
+   * birth with the presenter's planned warrior and this controller armed on
+   * it (src/loop/restart.ts owns the protocol and its failure modes). */
+  onDeath: "end",
   async start(mod2) {
     running = begin(mod2).catch((error) => {
       mod2.meta.log(`the Borg could not start: ${error instanceof Error ? error.message : String(error)}`);
@@ -16982,9 +17167,13 @@ var definition = {
   },
   /* The game tears its mods down before it reloads, and the headless runner registers them again on the same page after a save and reload. The message listener leaves the game here, or the second registration doubles every message. */
   stop() {
+    startEpoch += 1;
     running = void 0;
     const held = bridge;
     bridge = void 0;
+    const loop = restartHandle;
+    restartHandle = void 0;
+    void loop?.stop();
     void held?.dispose();
   },
   /* Offer to play only when this character was handed to an autoplayer before or was armed from the title row. Returning false is the normal case: the mod is installed and enabled, and this character has never been handed over, so the human keeps the keyboard. */
@@ -16999,5 +17188,6 @@ var definition = {
 };
 var plugin_default = definition;
 export {
+  WARRIOR_BIRTH_RACE_PLACEHOLDER,
   plugin_default as default
 };

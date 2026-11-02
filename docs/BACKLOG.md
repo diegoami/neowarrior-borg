@@ -1,60 +1,36 @@
 # Backlog
 
-Everything believed worth doing that is not an M1 task. The queue lives as
-GitHub issues (label `backlog`); this file is the ranked index that points at
-them, and the rank order is expected effect on the project's number (deepest
-depth a warrior reaches). Items are promoted to tasks when M1's baseline (T07)
-says what actually limits depth; each entry names its evidence.
+The queue lives as GitHub issues; this file is the ranked index for what
+stays in THIS fork. The routing rule (owner, 2026-11-02): class-agnostic
+improvements go to [better-borg](https://github.com/diegoami/better-borg) as
+issues or PRs, and this fork cherry-picks them; warrior-only work stays here.
 
-## Measured defects (fix first, each with a run record)
+## Moved to better-borg (2026-11-02)
 
-1. **The seed-1 door-closing loop** - the Borg spends 771/1500 decisions
-   closing doors; reproduced bit-for-bit on pristine upstream at our pin.
-   Evidence: `docs/runs/2026-11-02-import/`, [issue #12].
-   Expected effect: large - half a session on doors is depth not gained.
+Door-closing defect (was #12; engine gap, upstream report
+neostryder/neo-angband#428, follow-through better-borg#13) · ring and
+weapon/armour swaps (B03, better-borg#4) · diving and depth pacing
+(better-borg#9) · unique census (better-borg#10) · PF_COMBAT_REGEN
+(better-borg#11) · depth-ceiling settings (better-borg#12) · the bake-off
+runner as a shared instrument (B02, better-borg#3) · the strength roadmap -
+parameter evolution and knowledge accumulation - lives in better-borg's
+docs/plans/getting-stronger.md, built class-agnostic so every borg profits.
 
-## Unported upstream subsystems a warrior leans on
+## Here (warrior-only)
 
-2. **Ring swaps** - [#14](https://github.com/diegoami/neowarrior-borg/issues/14).
-   `borg_swap_rings` / `borg_wear_rings` unported
-   (`src/think-ladder.ts:679`; swap valuation seams deliberately unwired in
-   `src/think-session.ts`). A warrior's power IS its gear; swapping on
-   speed/resist rings is how melee characters survive depth.
-3. **Weapon/armour swap buying** - [#15](https://github.com/diegoami/neowarrior-borg/issues/15).
-   `src/store/buy.ts:538-549` - steps 7A/7B return early without swap
-   valuation, so the Borg never stockpiles a swap set. Same argument as 2;
-   likely one shared valuation seam.
-4. **Munchkin stair-scum diving and depth pacing** - [#16](https://github.com/diegoami/neowarrior-borg/issues/16).
-   The un-ported half of `borg_munchkin_start` (per our own SETTINGS.md) plus
-   upstream's depth pacing: the depth lever itself.
-5. **Live-unique census** for `borg_kills_uniques` - [#17](https://github.com/diegoami/neowarrior-borg/issues/17).
-   Hunting gatekeeper uniques matters most to characters who cannot teleport
-   away as freely - warriors.
-6. **`PF_COMBAT_REGEN`** - [#18](https://github.com/diegoami/neowarrior-borg/issues/18).
-   One arm of `borg_check_rest` needs an engine seam; tracked upstream as
-   neo-angband#34. Small, but rest decisions are survival decisions at low
-   hit points.
+1. **Warrior item valuation** - diverge where measurement shows warriors
+   should value gear differently (rule 3: earned by a run record).
+2. **Birth-plan tuning after T07** - if the bake-off says stat priorities or
+   the race shortlist should move, that is this fork's work, not better-borg's.
+3. **Watched-run automation** - [#21](https://github.com/diegoami/neowarrior-borg/issues/21),
+   only if manual watching bottlenecks.
+4. **Test-infra: rest-and-store timeout** - [#24](https://github.com/diegoami/neowarrior-borg/issues/24);
+   the fix may land in better-borg's tree first (same file), then cherry-pick.
+5. **DEX/INT/WIS larger-budget plan tests** - [#27](https://github.com/diegoami/neowarrior-borg/issues/27).
 
-## Guardrails and instrumentation
+## Reference
 
-7. **Depth ceiling and enchant limit as settings** - [#19](https://github.com/diegoami/neowarrior-borg/issues/19).
-   Upstream `borg_no_deeper`, `borg_enchant_limit`, now expressible through
-   the numeric-settings seam T05 opens. Value: bounded experiments and
-   reproducible measurement windows.
-8. **Bake-off harness as a `tools/` runner** - [#20](https://github.com/diegoami/neowarrior-borg/issues/20),
-   if T07 runs long: the sweep gets bigger (more seeds, more races) as
-   divergences need tighter comparisons.
-9. **Watched-run automation** - [#21](https://github.com/diegoami/neowarrior-borg/issues/21):
-   a CDP script that drives the desktop build and writes `watched.md`
-   skeletons - only if manual watching proves the bottleneck.
-
-## Deliberately not planned
-
-- **`borg_uses_dynamic_calcs`** - a second formula-driven calculation engine
-  (borg-formulas.c). Enormous, and its value over the ported math is
-  unproven for a warrior. Revisit only with evidence.
-- **Screen recordings** - owner decision on #1, 2026-11-01: not now.
-- **Engine changes of any kind** - the fork's contract is the published mod
-  API (rule 4). An engine need (like 6) is filed upstream, not patched here.
-
-[issue #12]: https://github.com/diegoami/neowarrior-borg/issues/12
+`../neo-angband-mod-squire` (read-only clone): the squire mod's journal
+taxonomy (lessons, grudges, lineage, calibration) informs better-borg's Phase
+3 knowledge format. Ideas, not code - its runtime learning cannot cross into
+a deterministic borg (rule 4 here, rule 5 there).

@@ -16,6 +16,21 @@ gamedata for harness runs.
 
 Optional: `gh` (issues, labels, releases).
 
+**Watching it play the real game** (the restart loop and title row need
+creation seams the game grants only to first-party mods, #28):
+
+1. Game checkout on its local `neowarrior-lab` branch (never pushed): it
+   trusts `diegoami/neowarrior-borg` as a first-party origin and carries the
+   local engine `noteSpot` fix (upstream neostryder/neo-angband#428) until a
+   fixed engine releases.
+2. Build and launch as a lab build: `NEO_ANGBAND_LAB_BUILD=1 pnpm dev` (web —
+   add `?labtrust=neowarrior` to the URL) or the desktop build with
+   `--lab-trust=neowarrior`.
+3. In-game: third-party mods allowed → install this repository as a folder →
+   **B** on the title screen. Answer the game's own confirm question for the
+   manage seam once. Without the lab build, the first death ends the run by
+   design (fail-closed; headless play is unaffected).
+
 ## 2. Task files
 
 `docs/tasks/T<nn>.md` from [`TEMPLATE.md`](tasks/TEMPLATE.md). 150-400 words.
@@ -86,3 +101,10 @@ Upstream fixes worth having are cherry-picked or merged by hand, in a merge
 whose message names the upstream SHA, and `pnpm verify` plus a harness
 re-baseline decides whether the fork's records carry over. Divergence debt is
 tracked in the task list, not in this file.
+
+**The sister fork.** Class-agnostic improvements live in
+[better-borg](https://github.com/diegoami/better-borg) (same import boundary
+`1fa2f8d`, so cherry-picks are trivial): found something generic while
+working here, file it there; landed something there that warriors need,
+cherry-pick it here with the source SHA in the merge message. Port defects
+are staged in better-borg and offered upstream as PRs.

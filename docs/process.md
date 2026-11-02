@@ -50,14 +50,18 @@ ending in a tagged release. When its tasks are merged:
    a fresh session, with a prompt from [`docs/review-prompt.md`](review-prompt.md).
    The reviewer verifies claims against the code, opens one issue per
    reproduced finding, and posts AGREE or BLOCK on the milestone issue. It
-   never edits the repository.
+   never edits the repository. The milestone review covers everything merged
+   since the previous tag, including tasks that merged without a review - the
+   milestone issue lists them.
 4. BLOCK findings are fixed in ordinary tasks; the candidate moves and the
    owner re-reviews. AGREE (or an owner tag without review, noted on the issue)
    tags the SHA. Tags never move (rule 9).
 
-Per-task reviews work the same way when the owner wants one: same template,
-verdict comment on the task's issue. The main session never auto-dispatches a
-reviewer and never model-pairs one; the owner chooses.
+**The milestone review is the gate; tasks do not wait for reviews.** A task
+merges when its Done-whens pass under the main session's own verification. A
+per-task review happens only when the owner asks for one, or when the main
+session flags a task as high-risk before merge and says why. The main session
+never auto-dispatches a reviewer and never model-pairs one; the owner chooses.
 
 ## 5. Run records
 

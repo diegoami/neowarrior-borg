@@ -1,8 +1,12 @@
 # Review prompts
 
-The template for owner-launched reviews (per task or per milestone). The owner
-launches any model they choose against a checkout of the repo with the prompt
-filled in; the main session never auto-dispatches a reviewer.
+The template for owner-launched reviews. By default there is one review per
+milestone: the big review of everything since the previous tag, before it is
+tagged. A per-task review happens only when the owner asks for one, or when
+the main session flags a task as high-risk before merge and says why
+(`docs/process.md` §4). The owner launches any model they choose against a
+checkout of the repo with the prompt filled in; the main session never
+auto-dispatches a reviewer.
 
 The reviewer posts its findings and verdict to GitHub itself, with `gh`, and
 never touches the repository: no edits, commits, pushes, merges or tags. This

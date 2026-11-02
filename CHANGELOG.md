@@ -7,18 +7,34 @@ matching git tag that an install pins itself to.
 ## 0.1.0 - 2026-11-02
 
 The fork's first version: upstream `1fa2f8d` (v1.4.0-beta.2) rebranded as
-`neowarrior`, with no behaviour change yet. The warrior birth, restart loop and
-run records come after this entry, one marked change each.
+`neowarrior`, then the milestone's tasks on top of it. The theme: the warrior
+always comes back - born planned, reborn on every death, recorded every run.
 
 - [Visible] **This is now the Warrior Borg.** New mod id (`neowarrior`), name,
-  repository and description; the title row becomes **New Warrior Borg
-  character**. The Borg inside is unchanged.
-- [Internal] **`ui:birth.replace` is declared** ahead of the automated warrior
-  birth; nothing uses it yet.
-- [Internal] Upstream's repository plumbing that does not apply to a fork is
-  removed: the issue redirect to the consolidated tracker, the dormant Nexus
-  publish and the upstream privacy gate. CI, the release notes script and
-  Dependabot stay.
+  repository and description; the title row reads **New Warrior Borg
+  character** and arms the automated birth.
+- [Visible] **Every warrior is born planned.** Under `ui:birth.replace` the
+  Borg births a Warrior with a fixed point-buy build (STR/CON first) and a
+  race from the bake-off shortlist (Half-Troll, Dunadan, High-Elf, Dwarf):
+  `borg.raceRandom` (default on) draws one race per birth, deterministically,
+  from a persisted lineage counter; `borg.raceChoice` (default 2, High-Elf -
+  the bake-off's recommendation) pins the race when the draw is off.
+- [Visible] **The warrior always comes back.** A death ends its character
+  (`onDeath: "end"`) and the loop rebirths the same plan
+  (`create({ resumeAutoplay: true })`), unattended.
+- [Visible] **The run is recorded.** An in-mod journal - depth milestones and
+  a graveyard entry per character - plus committed session records under
+  `docs/runs/`: the import baseline, the first warrior session, and the
+  64-life race bake-off across two engine variants.
+- [Internal] One session driver behind the play tests, `tools/runs.mjs` and
+  `tools/bakeoff.mjs`; the patched-engine variant protocol (byte-proven
+  apply/revert) and the pnpm shared-store leak hazard are documented in
+  `docs/runs/README.md`.
+- [Known issue] The pinned engine drops `square_note_spot` from the live
+  `setFeat` path (neostryder/neo-angband#428): on it, the seed-1 play test
+  records the door-close stall (771 of 1500 decisions) as the suite's one
+  tolerated failure. The fix is upstream's; this mod's engine floor rises
+  when a release carries it.
 
 ## Upstream, until v1.4.0-beta.2
 

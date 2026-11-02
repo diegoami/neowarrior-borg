@@ -21,14 +21,16 @@ came from, the way the port marks its own deviations.
 
 - **Birth is automated.** The title screen's **New Warrior Borg character** row
   (key B) starts a character whose creation this mod completes itself: Warrior
-  class, a race chosen from a measured shortlist (the `borg.raceChoice` setting), and a point-buy computed from
+  class, a race drawn uniformly from a measured shortlist by default
+  (`borg.raceRandom`; `borg.raceChoice` pins it when off), and a point-buy computed from
   the real stat-adjustment and cost tables rather than the game's generic
   suggestion. A human creating a character the ordinary way is left alone -
   the automated birth only runs for characters this mod is starting.
 - **Death is a re-roll, not an ending.** When the warrior dies, the mod starts
   the next one itself (`onDeath: "end"` plus `saves.create` with
-  `resumeAutoplayer`), so an unattended session is a chain of identical
-  warriors, not one random character after another.
+  `resumeAutoplayer`), so an unattended session is a chain of planned
+  warriors - the same optimized point-buy, a race drawn from the shortlist
+  each time - not one random character after another.
 - **Runs are recorded.** In-mod, each character keeps a journal (depth
   milestones from `dungeonlevel` events, a graveyard entry written at each
   death). Outside the mod, the headless harness writes per-run records - depth,

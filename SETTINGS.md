@@ -1,9 +1,11 @@
 # Settings reference
 
 The Borg reads the toggles below when its controller is created; changing any
-of them requires a reload before the controller uses the new value. The one
-numeric setting is different: `borg.raceChoice` is read at each birth, so a
-change applies to the next warrior without a reload.
+of them requires a reload before the controller uses the new value. The two
+birth settings are different: `borg.raceRandom` is read once per page (every
+armed birth follows the reload its writer issues, so each birth sees the
+then-current toggle) and `borg.raceChoice` at each birth, so both apply to
+the next warrior without waiting on anything else.
 
 | Flag | Default | What it does | Reload required |
 | --- | --- | --- | --- |
@@ -16,4 +18,5 @@ change applies to the next warrior without a reload.
 | `borg.worshipsGold` | off | Makes the Borg prioritize gold and delay some descents. | Yes, controller side. |
 | `borg.selfScum` | on | Lets the Borg work in town toward a chosen purchase. | Yes, controller side. |
 | `borg.munchkinStart` | off | Reduces early stockpile priorities for a faster cash focused start. | Yes, controller side. |
-| `borg.raceChoice` | 0 | The race the Borg's planned warrior is born as: 0 Half-Troll, 1 Dunadan, 2 High-Elf, 3 Dwarf - the bake-off shortlist, in this order everywhere. Falls back to Half-Troll on a pack that lacks the named race. | No: read at each birth. |
+| `borg.raceRandom` | on | Every warrior draws its race uniformly from the bake-off shortlist (Half-Troll, Dunadan, High-Elf, Dwarf), seeded by a persisted birth counter: the same counter always draws the same race, each birth bumps the counter, so an unattended line varies its race deterministically - no clock, no random numbers, the Borg's decision RNG untouched. The counter is not a record of what was played; the per-character journal is. | Yes, birth side: read once per page. |
+| `borg.raceChoice` | 2 | The race the Borg's planned warrior is born as when `borg.raceRandom` is off: 0 Half-Troll, 1 Dunadan, 2 High-Elf, 3 Dwarf - the bake-off shortlist, in this order everywhere; the default (2, High-Elf) is the bake-off's recommendation. Falls back to Half-Troll on a pack that lacks the named race. | No: read at each birth. |

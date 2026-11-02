@@ -69,7 +69,8 @@ import { createBridge, type Bridge } from "./src/api2/host.js";
 import { createTick, type Tick } from "./src/api2/controller.js";
 import { BORG_MARK, BORG_VIEW } from "./src/world/grid.js";
 import { createWarriorBirthPresenter } from "./src/birth/presenter.js";
-import { RACE_CHOICE_SETTING, resolveWarriorRace } from "./src/birth/settings.js";
+import { RACE_CHOICE_SETTING, RACE_RANDOM_RULE, resolveWarriorRace } from "./src/birth/settings.js";
+import { bumpLineage, readLineage } from "./src/birth/lineage.js";
 import { installWarriorJournal, type WarriorJournal } from "./src/records/journal.js";
 import { installWarriorRestart, type WarriorRestart } from "./src/loop/restart.js";
 
@@ -236,21 +237,38 @@ interface Running {
  * The protocol, its call sequence and its safety properties are documented in
  * src/birth/presenter.ts.
  *
- * THE RACE comes from the mod's first numeric setting, `borg.raceChoice`
- * (manifest.json's `settings` key; the candidate list and resolver live in
+ * THE RACE comes from the mod's two race settings (manifest.json's `rules`
+ * and `settings` keys; the candidates, the draw and the resolver live in
  * src/birth/settings.ts). It is RESOLVED ONCE PER BIRTH, AT SHOW: the
  * presenter reads `deps.raceName` inside show(), and the property wired
- * below is a getter over the resolver, so the index-to-name decision - clamp,
+ * below is a getter over the resolver, so the decision - draw or pin, clamp,
  * pack-unknown fallback, log - runs at the birth itself, never cached at mod
- * start. The setting's VALUE and the pack's race names are fetched once per
+ * start. The setting VALUES and the pack's race names are fetched once per
  * page, here at registration, because the settings and content calls are
  * async while show() is pinned synchronous (src/birth/presenter.ts); every
  * birth this flag protocol arms follows the page reload its writer issues,
  * so this page's fetch is always the then-current one for the birth that
  * reads it. A host with no settings seam, a failed fetch, or a pack whose
- * records cannot be read leaves the declared default and no pack check -
+ * records cannot be read leaves the declared defaults and no pack check -
  * the resolver says which candidate that is in the log, and the presenter's
  * own unknown-race decline is the backstop.
+ *
+ * FORK: T09 (#33) - the DRAW. `borg.raceRandom` (a rule, default ON) gates a
+ * uniform draw from the full shortlist, seeded by the install slot's
+ * `lineage` counter (src/birth/lineage.ts): read here once per page (a fresh
+ * install reads 0, so its first draw is reproducible), consumed by the
+ * getter at show through the one-draw hash, and bumped after each draw -
+ * same persisted counter, same race; every reload that drew varies the next
+ * one. Rule 4 held: no clock, no game RNG, and the decision RNG untouched
+ * (its await-counts are pinned by T05/T06). The toggle itself comes from the
+ * resolved rule flags, which the host fixes when the mod starts - the same
+ * per-page lifetime the settings fetch has, for the same reason. With the
+ * toggle OFF the draw is skipped entirely and `borg.raceChoice` pins the
+ * race exactly as T05 shipped it (its default now High-Elf, the bake-off's
+ * recommendation). The bump is fire-and-forget from the synchronous getter
+ * and never verifies: a swallowed bump is benign and deterministic (the next
+ * draw re-seeds from what is still stored, repeating a race at worst),
+ * unlike the birth flag, where a swallowed write strands a birth.
  */
 function warriorBirth(mod: ModApi2): Api2BirthPresenter | undefined {
   const core = (mod.engine as { readonly core?: typeof Core } | undefined)?.core;
@@ -265,6 +283,14 @@ function warriorBirth(mod: ModApi2): Api2BirthPresenter | undefined {
    * changes nothing here, and the birth still runs on the declared default. */
   let raceChoice: unknown = RACE_CHOICE_SETTING.default;
   let packRaces: readonly string[] | null = null;
+  /* FORK: T09 (#33) - the draw's toggle and seed, same per-page lifetime.
+   * The counter read is a read; the one write (the bump) happens only after
+   * a draw, at show. */
+  const raceRandom = mod.meta.flags[RACE_RANDOM_RULE.flag] ?? RACE_RANDOM_RULE.default;
+  let lineage = 0;
+  void readLineage(mod.store.install).then((read) => {
+    lineage = read;
+  });
   try {
     if (typeof mod.meta.settings === "function") {
       void mod.meta.settings().then(
@@ -297,7 +323,21 @@ function warriorBirth(mod: ModApi2): Api2BirthPresenter | undefined {
     slot: mod.store.install,
     log: (message) => mod.meta.log(message),
     get raceName(): string {
-      return resolveWarriorRace(raceChoice, packRaces, (message) => mod.meta.log(message)).raceName;
+      const resolved = resolveWarriorRace(
+        { random: raceRandom, choice: raceChoice, lineage, packRaces },
+        (message) => mod.meta.log(message),
+      );
+      /* The draw's one write: bump the counter AFTER the draw seeded from
+       * it, so the next birth draws the next race. A failed bump only logs -
+       * see the comment above for why it is not verified like the flag. */
+      if (resolved.drawn) {
+        void bumpLineage(mod.store.install).then((landed) => {
+          if (!landed) {
+            mod.meta.log("the Borg could not persist its birth counter, so the next warrior may draw this one's race again");
+          }
+        });
+      }
+      return resolved.raceName;
     },
     costTable: core.BIRTH_STAT_COSTS,
     statBase: core.BIRTH_STAT_BASE,

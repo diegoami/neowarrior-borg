@@ -372,11 +372,12 @@ suite("the warrior restart loop, headless", () => {
   const when = engineReady ? it : it.skip;
 
   /**
-   * The harness's own EXPLICIT race. It never goes through the raceChoice
-   * setting (src/birth/settings.ts): the harness hands startGame the plan
+   * The harness's own EXPLICIT race. It never goes through the race
+   * settings (src/birth/settings.ts): the harness hands startGame the plan
    * directly, so it names its race here - candidate 0 of the same shortlist
-   * the setting indexes, which is also the setting's declared default, so
-   * the default warrior is the same one either way.
+   * the settings index (Half-Troll, the import baseline's race, kept for
+   * comparability with the committed run records). The default draw is not
+   * involved: the harness measures explicit races, the mod's births draw.
    */
   const WARRIOR_RACE = WARRIOR_RACE_CANDIDATES[0];
 

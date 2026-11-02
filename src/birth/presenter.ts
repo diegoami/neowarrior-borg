@@ -148,10 +148,10 @@ export interface WarriorBirthDeps {
   readonly log: (message: string) => void;
   /**
    * The race to birth, by its catalogue name - the caller's setting, never a
-   * catalogue-order default (the T03 hazard). T05's raceChoice setting
-   * resolves it once per birth at show (src/birth/settings.ts); the wiring in
-   * plugin.ts supplies it, and this module never learns where a name came
-   * from.
+   * catalogue-order default (the T03 hazard). T05's raceChoice setting - and,
+   * since T09, the raceRandom draw it gates - resolves it once per birth at
+   * show (src/birth/settings.ts); the wiring in plugin.ts supplies it, and
+   * this module never learns where a name came from.
    */
   readonly raceName: string;
   /**

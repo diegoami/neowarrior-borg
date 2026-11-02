@@ -111,17 +111,24 @@
         "description": "borg_munchkin_start. Below character level borg_munchkin_level (12), value stockpiles of resist poison and speed potions, phase door, word of recall and the deeper cures less than it normally would, on the assumption that a young character is cashing out early. Upstream, this setting also makes the Borg stair-scum for loot to sell at this stage. That part is not ported, so here it changes what the Borg carries and leaves how it dives alone.",
         "default": false,
         "requiresReload": true
+      },
+      {
+        "flag": "borg.raceRandom",
+        "title": "Random suited race",
+        "description": "The fork's own toggle (no upstream borg_ setting): every warrior the Borg births draws its race from the bake-off shortlist - Half-Troll, Dunadan, High-Elf, Dwarf - seeded by a persisted birth counter, so an unattended line varies its race deterministically, with no clock and no random number draw. Off: borg.raceChoice pins the race.",
+        "default": true,
+        "requiresReload": true
       }
     ],
     "settings": [
       {
         "id": "borg.raceChoice",
         "title": "Warrior race",
-        "description": "The race the Borg's planned warrior is born as: 0 Half-Troll, 1 Dunadan, 2 High-Elf, 3 Dwarf - the bake-off shortlist, in this order everywhere. Read at each birth, so a change applies to the next warrior.",
+        "description": "The race the Borg's planned warrior is born as when borg.raceRandom is off: 0 Half-Troll, 1 Dunadan, 2 High-Elf, 3 Dwarf - the bake-off shortlist, in this order everywhere. The default (2, High-Elf) is the bake-off's recommendation. Read at each birth, so a change applies to the next warrior.",
         "min": 0,
         "max": 3,
         "step": 1,
-        "default": 0
+        "default": 2
       }
     ]
   }

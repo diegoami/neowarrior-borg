@@ -16948,12 +16948,29 @@ var WARRIOR_RACE_CANDIDATES = ["Half-Troll", "Dunadan", "High-Elf", "Dwarf"];
 var RACE_CHOICE_SETTING = {
   id: "borg.raceChoice",
   title: "Warrior race",
-  description: "The race the Borg's planned warrior is born as: 0 Half-Troll, 1 Dunadan, 2 High-Elf, 3 Dwarf - the bake-off shortlist, in this order everywhere. Read at each birth, so a change applies to the next warrior.",
+  description: "The race the Borg's planned warrior is born as when borg.raceRandom is off: 0 Half-Troll, 1 Dunadan, 2 High-Elf, 3 Dwarf - the bake-off shortlist, in this order everywhere. The default (2, High-Elf) is the bake-off's recommendation. Read at each birth, so a change applies to the next warrior.",
   min: 0,
   max: WARRIOR_RACE_CANDIDATES.length - 1,
   step: 1,
-  default: 0
+  default: 2
 };
+var RACE_RANDOM_RULE = {
+  flag: "borg.raceRandom",
+  title: "Random suited race",
+  description: "The fork's own toggle (no upstream borg_ setting): every warrior the Borg births draws its race from the bake-off shortlist - Half-Troll, Dunadan, High-Elf, Dwarf - seeded by a persisted birth counter, so an unattended line varies its race deterministically, with no clock and no random number draw. Off: borg.raceChoice pins the race.",
+  default: true,
+  requiresReload: true
+};
+function drawWarriorRaceIndex(lineage) {
+  let h = lineage >>> 0;
+  h ^= h >>> 16;
+  h = Math.imul(h, 2246822507);
+  h ^= h >>> 13;
+  h = Math.imul(h, 3266489909);
+  h ^= h >>> 16;
+  const spread = h >>> 0;
+  return Math.floor(spread / 4294967296 * WARRIOR_RACE_CANDIDATES.length);
+}
 function declaredValue(setting, stored) {
   const raw = typeof stored === "number" && Number.isFinite(stored) ? stored : setting.default;
   const clamped = Math.min(setting.max, Math.max(setting.min, raw));
@@ -16967,21 +16984,48 @@ function decimalsOf(value) {
   const point = text.indexOf(".");
   return point === -1 ? 0 : text.length - point - 1;
 }
-function resolveWarriorRace(stored, packRaces, log) {
-  const index = declaredValue(RACE_CHOICE_SETTING, stored);
+function resolveWarriorRace(input, log) {
+  const index = input.random ? drawWarriorRaceIndex(input.lineage) : declaredValue(RACE_CHOICE_SETTING, input.choice);
   const named = WARRIOR_RACE_CANDIDATES[index] ?? WARRIOR_RACE_CANDIDATES[0];
-  const known = packRaces !== null && packRaces.length > 0 ? packRaces.includes(named) : true;
+  const known = input.packRaces !== null && input.packRaces.length > 0 ? input.packRaces.includes(named) : true;
   const fallback = WARRIOR_RACE_CANDIDATES[0];
+  const why = input.random ? `borg.raceRandom on: lineage draw ${String(input.lineage)} of the ${String(WARRIOR_RACE_CANDIDATES.length)}-race shortlist picked candidate ${String(index)}` : `borg.raceRandom off; borg.raceChoice ${String(index)} of ${String(RACE_CHOICE_SETTING.min)}-${String(RACE_CHOICE_SETTING.max)}`;
   if (known) {
-    log(
-      `the Borg's next warrior will be born a ${named} (borg.raceChoice ${String(index)} of ${String(RACE_CHOICE_SETTING.min)}-${String(RACE_CHOICE_SETTING.max)})`
-    );
-    return { raceName: named, index, fellBack: false };
+    log(`the Borg's next warrior will be born a ${named} (${why})`);
+    return { raceName: named, index, fellBack: false, drawn: input.random };
   }
   log(
-    `the Borg's next warrior will be born a ${fallback} (borg.raceChoice ${String(index)} asked for ${named}, which this pack does not define, so candidate 0 is born instead)`
+    `the Borg's next warrior will be born a ${fallback} (${why} asked for ${named}, which this pack does not define, so candidate 0 is born instead)`
   );
-  return { raceName: fallback, index, fellBack: true };
+  return { raceName: fallback, index, fellBack: true, drawn: input.random };
+}
+
+// src/birth/lineage.ts
+var LINEAGE_KEY = "lineage";
+function lineageFrom(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return 0;
+  const stored = value[LINEAGE_KEY];
+  return typeof stored === "number" && Number.isInteger(stored) && stored >= 0 ? stored : 0;
+}
+async function readLineage(slot) {
+  try {
+    const read = await slot.get();
+    if (!read.ok) return 0;
+    return lineageFrom(read.value);
+  } catch {
+    return 0;
+  }
+}
+async function bumpLineage(slot) {
+  try {
+    const read = await slot.get();
+    if (!read.ok) return false;
+    const base = read.value !== null && typeof read.value === "object" && !Array.isArray(read.value) ? read.value : {};
+    const written = await slot.set({ ...base, [LINEAGE_KEY]: lineageFrom(read.value) + 1 });
+    return written.ok;
+  } catch {
+    return false;
+  }
 }
 
 // src/records/journal.ts
@@ -17371,6 +17415,11 @@ function warriorBirth(mod2) {
   }
   let raceChoice = RACE_CHOICE_SETTING.default;
   let packRaces = null;
+  const raceRandom = mod2.meta.flags[RACE_RANDOM_RULE.flag] ?? RACE_RANDOM_RULE.default;
+  let lineage = 0;
+  void readLineage(mod2.store.install).then((read) => {
+    lineage = read;
+  });
   try {
     if (typeof mod2.meta.settings === "function") {
       void mod2.meta.settings().then(
@@ -17398,7 +17447,18 @@ function warriorBirth(mod2) {
     slot: mod2.store.install,
     log: (message) => mod2.meta.log(message),
     get raceName() {
-      return resolveWarriorRace(raceChoice, packRaces, (message) => mod2.meta.log(message)).raceName;
+      const resolved = resolveWarriorRace(
+        { random: raceRandom, choice: raceChoice, lineage, packRaces },
+        (message) => mod2.meta.log(message)
+      );
+      if (resolved.drawn) {
+        void bumpLineage(mod2.store.install).then((landed) => {
+          if (!landed) {
+            mod2.meta.log("the Borg could not persist its birth counter, so the next warrior may draw this one's race again");
+          }
+        });
+      }
+      return resolved.raceName;
     },
     costTable: core.BIRTH_STAT_COSTS,
     statBase: core.BIRTH_STAT_BASE

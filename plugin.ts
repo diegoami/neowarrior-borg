@@ -12,7 +12,8 @@
  * between the game's API and the port: everything else under src/ is the port,
  * carried over from the game's repository. This file's job is to satisfy the
  * mod API, read the game's content once, and take a decision at each input wait.
- * title.ts adds the title screen's "New Warrior Borg character" row.
+ * title.ts adds the title screen's "New Warrior Borg character" row, which
+ * since T05 also arms the warrior birth through the raceChoice setting.
  *
  * ------------------------------------------------------------------
  * WHY BORG IS A MOD AT ALL
@@ -68,6 +69,7 @@ import { createBridge, type Bridge } from "./src/api2/host.js";
 import { createTick, type Tick } from "./src/api2/controller.js";
 import { BORG_MARK, BORG_VIEW } from "./src/world/grid.js";
 import { createWarriorBirthPresenter } from "./src/birth/presenter.js";
+import { RACE_CHOICE_SETTING, resolveWarriorRace } from "./src/birth/settings.js";
 import { installWarriorRestart, type WarriorRestart } from "./src/loop/restart.js";
 
 /**
@@ -82,9 +84,11 @@ import { installWarriorRestart, type WarriorRestart } from "./src/loop/restart.j
  * Offering to play from an unmarked save would reintroduce a boot-time confirm
  * every launch merely because the mod is enabled.
  *
- * The one other way in is the title row: a character started from "New Borg
- * character" arrives armed, and choosing the row was the player's consent for
- * that character.
+ * The one other way in is the title row: a character started from the "New
+ * Warrior Borg character" row arrives armed - and, since T05, born as the
+ * planned warrior (title.ts sets the birth flag at its commit point) -
+ * because choosing the row was already the player's consent for that
+ * character.
  */
 function characterAlreadyAutoplayed(context: Api2ControllerContext): boolean {
   const state = context.engine?.state as { readonly actor?: { readonly player?: { readonly noscore?: number } } } | undefined;
@@ -217,27 +221,33 @@ interface Running {
 }
 
 /**
- * FORK: T03 (#6) - the race the birth presenter plans for, until T05's
- * `raceChoice` setting replaces this constant with the setting's resolver.
- * Candidate 0 of the bake-off shortlist (docs/tasks/T05.md): Half-Troll.
- * Exported because T04's headless harness (src/play.test.ts) must boot the
- * SAME race the presenter births - the loop's whole claim is that every
- * character in a session is this one.
- */
-export const WARRIOR_BIRTH_RACE_PLACEHOLDER = "Half-Troll";
-
-/**
- * FORK: T03 (#6) - the presenter under `ui:birth.replace` (already declared in
- * manifest.json) that births the planned warrior when the mod's one-shot
- * install-slot flag is set (by T04's restart loop and T05's title row), and
- * declines otherwise so the game shows its own screens: a human creating a
- * character is never hijacked. The engine's birth cost table is read here the
- * same way the bridge reads the engine (mod.engine.core, cast as in
+ * FORK: T03 (#6), T05 (#8) - the presenter under `ui:birth.replace` (already
+ * declared in manifest.json) that births the planned warrior when the mod's
+ * one-shot install-slot flag is set (by T04's restart loop and T05's title
+ * row), and declines otherwise so the game shows its own screens: a human
+ * creating a character is never hijacked. The engine's birth cost table is
+ * read here the same way the bridge reads the engine (mod.engine.core, cast as in
  * src/api2/host.ts - a bundled engine copy is forbidden), because the
  * presenter itself stays game-free. Without the engine there is no presenter;
  * like the bridge's "no engine" start failure, that birth falls to the game.
  * The protocol, its call sequence and its safety properties are documented in
  * src/birth/presenter.ts.
+ *
+ * THE RACE comes from the mod's first numeric setting, `borg.raceChoice`
+ * (manifest.json's `settings` key; the candidate list and resolver live in
+ * src/birth/settings.ts). It is RESOLVED ONCE PER BIRTH, AT SHOW: the
+ * presenter reads `deps.raceName` inside show(), and the property wired
+ * below is a getter over the resolver, so the index-to-name decision - clamp,
+ * pack-unknown fallback, log - runs at the birth itself, never cached at mod
+ * start. The setting's VALUE and the pack's race names are fetched once per
+ * page, here at registration, because the settings and content calls are
+ * async while show() is pinned synchronous (src/birth/presenter.ts); every
+ * birth this flag protocol arms follows the page reload its writer issues,
+ * so this page's fetch is always the then-current one for the birth that
+ * reads it. A host with no settings seam, a failed fetch, or a pack whose
+ * records cannot be read leaves the declared default and no pack check -
+ * the resolver says which candidate that is in the log, and the presenter's
+ * own unknown-race decline is the backstop.
  */
 function warriorBirth(mod: ModApi2): Api2BirthPresenter | undefined {
   const core = (mod.engine as { readonly core?: typeof Core } | undefined)?.core;
@@ -245,10 +255,47 @@ function warriorBirth(mod: ModApi2): Api2BirthPresenter | undefined {
     mod.meta.log("the Borg has no engine here, so the game shows its own character creation");
     return undefined;
   }
+  /* The transport for the per-birth resolution above: the setting's current
+   * value and the pack's race names, each read as late as the async API
+   * allows and held for the getter to resolve from at show. Both are guarded
+   * the same way a missing seam is: a host whose call throws or refuses
+   * changes nothing here, and the birth still runs on the declared default. */
+  let raceChoice: unknown = RACE_CHOICE_SETTING.default;
+  let packRaces: readonly string[] | null = null;
+  try {
+    if (typeof mod.meta.settings === "function") {
+      void mod.meta.settings().then(
+        (read) => {
+          if (read.ok) raceChoice = read.value[RACE_CHOICE_SETTING.id] ?? RACE_CHOICE_SETTING.default;
+        },
+        () => {
+          /* Kept at the declared default; the resolver logs the birth's race. */
+        },
+      );
+    }
+    if (typeof mod.content?.records === "function") {
+      void mod.content.records("p_race").then(
+        (read) => {
+          if (!read.ok) return;
+          const names = read.value
+            .map((record) => (record as { readonly name?: unknown }).name)
+            .filter((name): name is string => typeof name === "string");
+          packRaces = names.length > 0 ? names : null;
+        },
+        () => {
+          /* No pack knowledge; the chosen candidate stands. */
+        },
+      );
+    }
+  } catch {
+    /* Held at the defaults; the resolver says which candidate that is. */
+  }
   return createWarriorBirthPresenter({
     slot: mod.store.install,
     log: (message) => mod.meta.log(message),
-    raceName: WARRIOR_BIRTH_RACE_PLACEHOLDER,
+    get raceName(): string {
+      return resolveWarriorRace(raceChoice, packRaces, (message) => mod.meta.log(message)).raceName;
+    },
     costTable: core.BIRTH_STAT_COSTS,
     statBase: core.BIRTH_STAT_BASE,
   });
@@ -293,13 +340,15 @@ async function begin(mod: ModApi2): Promise<Running | null> {
    * config.ts's setBuffTimerSafetyNet for why. */
   setBuffTimerSafetyNet(mod.meta.flags["bugfix.borgFixes"] ?? true);
   const borg = createBorg({ resolvers: makeCoreResolvers(made.resolverInput()), cfg });
-  /* The title row needs ui:title and profiles:manage; without both there is no row. */
+  /* The title row needs ui:title, profiles:manage and the install slot (T05:
+   * the row sets the birth flag there); without all three there is no row. */
   registerBorgTitle(
     {
       id: mod.meta.id,
       log: (message) => mod.meta.log(message),
       ...(mod.presentation?.title ? { title: mod.presentation.title } : {}),
       ...(mod.manage ? { profiles: mod.manage.profiles } : {}),
+      slot: mod.store.install,
     },
     installMemory(mod.store.install),
   );

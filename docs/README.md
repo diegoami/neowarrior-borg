@@ -8,9 +8,9 @@ and where the longer material is. The account of why each of these exists is in
 
 ## Settings
 
-Each one is a named toggle on the game's own Mods screen, which shows the full
-description. The identifier is the name a save and another mod see; where a
-switch has no flag of its own, the game knows it by its section id instead.
+Each toggle is a named switch on the game's own Mods screen, which shows the
+full description. The identifier is the name a save and another mod see; where
+a switch has no flag of its own, the game knows it by its section id instead.
 
 | Setting | Identifier | Default | What it does |
 | --- | --- | --- | --- |
@@ -23,6 +23,13 @@ switch has no flag of its own, the game knows it by its section id instead.
 | Value gold | `borg.worshipsGold` | off | borg_worships_gold. Sell harder, walk down rather than pay for a recall, and put off the first deep recall. |
 | Save up for something it wants | `borg.selfScum` | on | borg_self_scum. Let the Borg set itself a gold target and work in town until it can afford one item it has decided it needs. |
 | Skimp on stockpiles for an early munchkin run | `borg.munchkinStart` | off | borg_munchkin_start. Below character level borg_munchkin_level (12), stop valuing potions of resist poison and speed, phase door, word of recall and the deeper cure stockpiles as highly as it normally would, on the assumption that a young character is cashing out rather than settling in. |
+
+The Mods screen also carries the mod's numeric settings, each one number a
+player can move. The Borg reads them when they matter, not at load time.
+
+| Setting | Identifier | Default | Range | What it does |
+| --- | --- | --- | --- | --- |
+| Warrior race | `borg.raceChoice` | 0 | 0-3 | The race the Borg's planned warrior is born as: 0 Half-Troll, 1 Dunadan, 2 High-Elf, 3 Dwarf - the bake-off shortlist, in this order everywhere. Read at each birth, so a change applies to the next warrior. |
 
 ## What it needs
 

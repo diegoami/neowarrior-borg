@@ -7,12 +7,23 @@
  * the player's consent for that one character, which is why plugin.ts offers to
  * play on an armed character without the Ctrl-Z confirm.
  *
- * The row needs two host seams: the title (`ui:title`) and profile management
- * (`profiles:manage`). With either missing nothing is registered and the Borg
+ * FORK: T05 (#8) - the row does not only ARM the controller, it ARMS THE
+ * BIRTH: immediately before the create-character action (the row's commit
+ * point - the last call it makes on the page) it sets the birth presenter's
+ * one-shot flag (src/birth/presenter.ts), so the character it starts is BORN
+ * as the planned warrior, its race chosen by the borg.raceChoice setting
+ * (src/birth/settings.ts). Choosing the row was already the player's consent
+ * in upstream's design; this spends it on the fork's warrior instead of the
+ * game's own screens.
+ *
+ * The row needs three host seams: the title (`ui:title`), profile management
+ * (`profiles:manage`) and the mod's install slot (`mod.store.install`, where
+ * the flag lives). With any missing nothing is registered and the Borg
  * starts only from Ctrl-Z, as before.
  */
 
 import type { Api2Manage, Api2Profile, Api2ProfileAction, Api2Slot, Api2Title, JsonValue } from "@rpgm-tools/neo-angband-mod-sdk";
+import { BIRTH_FLAG_KEY, clearWarriorBirthFlag, setWarriorBirthFlag } from "./src/birth/presenter.js";
 
 /** The parts of the mod API the row reads. */
 export interface TitleCtx {
@@ -20,6 +31,13 @@ export interface TitleCtx {
   readonly log?: (message: string) => void;
   readonly title?: Api2Title;
   readonly profiles?: Api2Manage["profiles"];
+  /**
+   * FORK: T05 (#8) - the mod's install slot (mod.store.install), the birth
+   * flag's home. Without it the row cannot arm a planned birth, and a row
+   * that started characters it could not plan would be lying, so nothing is
+   * registered - the same treatment a missing title or profile seam gets.
+   */
+  readonly slot?: Pick<Api2Slot, "get" | "set">;
 }
 
 /** The ids of the profiles the Borg made, kept outside every profile. */
@@ -103,21 +121,87 @@ export function freshName(taken: readonly string[]): string {
   for (let n = 2; ; n++) if (!used.has(`borg ${String(n)}`)) return `Borg ${String(n)}`;
 }
 
-/** Register the row when the host offers both seams. Returns whether it did. */
+/** Whether the one-shot birth flag is standing in the slot right now. The presenter owns the flag's shape; this reads it. */
+async function birthFlagStanding(slot: Pick<Api2Slot, "get" | "set">): Promise<boolean> {
+  try {
+    const read = await slot.get();
+    if (!read.ok) return false;
+    const value = read.value;
+    return value !== null && typeof value === "object" && !Array.isArray(value) &&
+      (value as Record<string, unknown>)[BIRTH_FLAG_KEY] === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Register the row when the host offers all three seams. Returns whether it did. */
 export function registerBorgTitle(ctx: TitleCtx, memory: ProfileMemory): boolean {
   const title = ctx.title;
   const profiles = ctx.profiles;
-  if (title === undefined || profiles === undefined) {
-    ctx.log?.(`the Borg has no title row, because this game gives it no ${title === undefined ? "title seam" : "profile seam"}`);
+  const slot = ctx.slot;
+  if (title === undefined || profiles === undefined || slot === undefined) {
+    const missing = title === undefined ? "title seam" : profiles === undefined ? "profile seam" : "install slot";
+    ctx.log?.(`the Borg has no title row, because this game gives it no ${missing}`);
     return false;
   }
   const self = ctx.id ?? "borg";
 
+  /**
+   * FORK: T05 (#8) - THE COMMIT POINT, pinned from the host's own
+   * profile-runtime.ts: `switchTo(id, { kind: "create-character",
+   * armController: true })` is the last call the row makes on this page. The
+   * host stashes the action in durable storage and reloads, and the next
+   * page runs character creation with the controller armed - so the one-shot
+   * birth flag must already be standing in the install slot BEFORE that
+   * call: after it there is no page left to set it on, and the presenter of
+   * the next page (built at mod registration) reads the flag before any
+   * birth is offered. That is why the flag is set as late as possible -
+   * every earlier refusal path (Escape, a refused create or enable) reaches
+   * no flag at all - and behind a read-back, not the write's own ok (#25: a
+   * slot answers ok to a set whose backing write was swallowed, and
+   * reloading into a flag that is not there births nothing at all,
+   * silently, because no flag reads as the human path). The same verified
+   * standard the restart loop holds its own flag-set to (src/loop/restart.ts
+   * - the loop reads the flag's shape back the same way). The flag-set
+   * lives HERE, on the mod side of the seam, not inside the manage call:
+   * the install slot is every host's, while `manage.profiles` is a
+   * first-party seam this row only gets on the game's own host.
+   */
+  async function armBirth(): Promise<boolean> {
+    const written = await setWarriorBirthFlag(slot!);
+    if (written && (await birthFlagStanding(slot!))) return true;
+    ctx.log?.("the Borg's birth flag would not settle in storage, so the title row starts no character");
+    await ask(title!, "The Borg could not start the character: its birth flag would not settle in storage.", [GIVE_UP]);
+    return false;
+  }
+
+  /**
+   * The switch was refused, so the page is NOT going away: take the flag
+   * back, verified, or say at full volume that it may still be set - a
+   * standing flag beside a live page would take the NEXT character created
+   * after any later reload - a human's - as the presenter's own (the
+   * stranded-flag hazard; the same words and standard as the restart loop's,
+   * src/loop/restart.ts, and the presenter's prepare is still the last line).
+   */
+  async function strand(): Promise<void> {
+    const cleared = await clearWarriorBirthFlag(slot!);
+    if (cleared) return;
+    ctx.log?.(
+      "the Borg could not durably clear its birth flag after a refused start, so the flag may still be set: " +
+        "the next character created after any later reload would be born as the Borg's planned warrior. " +
+        "The presenter still consumes-or-declines it on that page, but a human's birth could be taken once - " +
+        "clear the mod's install storage before letting anyone create a character here",
+    );
+  }
+
   async function here(): Promise<void> {
     const listed = await profiles!.list();
     const id = listed.ok ? listed.value.find((profile) => profile.active)?.id ?? null : null;
+    if (!(await armBirth())) return;
     const started = await profiles!.switchTo(id, ARMED);
-    if (!started.ok) await ask(title!, `The Borg could not start the character: ${started.message}`, [GIVE_UP]);
+    if (started.ok) return;
+    await strand();
+    await ask(title!, `The Borg could not start the character: ${started.message}`, [GIVE_UP]);
   }
 
   /** A refusal on the way to a separate profile falls back to this one. */
@@ -161,8 +245,14 @@ export function registerBorgTitle(ctx: TitleCtx, memory: ProfileMemory): boolean
         if (!enabled.ok) return refused(enabled.message);
       }
     }
+    /* FORK: T05 (#8) - the commit point of the separate-profile flow: the
+     * flag goes in immediately before the switch (see armBirth), and comes
+     * back out the same way if the switch is refused. */
+    if (!(await armBirth())) return;
     const switched = await profiles!.switchTo(target.id, ARMED);
-    if (!switched.ok) return refused(switched.message);
+    if (switched.ok) return;
+    await strand();
+    return refused(switched.message);
   }
 
   void title

@@ -46,7 +46,7 @@ import type { GamePack, GameState, StartedGame } from "@rpgm-tools/neo-angband-c
 import { createBorg } from "./controller.js";
 import { makeCoreResolvers } from "./resolvers.js";
 import { ladderFromCostTable, planWarriorBirth, WARRIOR_CLASS_NAME, type WarriorBuildPlan } from "./birth/plan.js";
-import { WARRIOR_BIRTH_RACE_PLACEHOLDER } from "../plugin.js";
+import { WARRIOR_RACE_CANDIDATES } from "./birth/settings.js";
 
 /** The game's checkout, holding the content pack a real boot needs. */
 function packRoot(): string | null {
@@ -442,9 +442,18 @@ suite("the warrior restart loop, headless", () => {
   const when = engineReady ? it : it.skip;
 
   /**
+   * The harness's own EXPLICIT race. It never goes through the raceChoice
+   * setting (src/birth/settings.ts): the harness hands startGame the plan
+   * directly, so it names its race here - candidate 0 of the same shortlist
+   * the setting indexes, which is also the setting's declared default, so
+   * the default warrior is the same one either way.
+   */
+  const WARRIOR_RACE = WARRIOR_RACE_CANDIDATES[0];
+
+  /**
    * The plan the presenter replays, computed exactly as plugin.ts wires it:
    * the same module, the published engine's own cost table and point budget,
-   * the placeholder race. This is the ONE plan both callers share; a
+   * this explicit race. This is the ONE plan both callers share; a
    * disagreement between the harness's warrior and the presenter's is a bug
    * in one of them, not a choice each makes.
    */
@@ -457,7 +466,7 @@ suite("the warrior restart loop, headless", () => {
         stats: ["STR", "INT", "WIS", "DEX", "CON"],
         pointBudget: MAX_BIRTH_POINTS,
       },
-      raceName: WARRIOR_BIRTH_RACE_PLACEHOLDER,
+      raceName: WARRIOR_RACE,
       costs: ladderFromCostTable(BIRTH_STAT_COSTS, BIRTH_STAT_BASE),
     });
   }
@@ -596,7 +605,7 @@ suite("the warrior restart loop, headless", () => {
     /* The plan is what T02's walk makes of the stock table: STR 18, CON 17,
      * the rest at base, no points left - asserted here rather than assumed,
      * because the session's meaning depends on it. */
-    expect(plan.raceName).toBe(WARRIOR_BIRTH_RACE_PLACEHOLDER);
+    expect(plan.raceName).toBe(WARRIOR_RACE);
     expect(plan.baseStats).toEqual([18, 10, 10, 10, 17]);
     expect(plan.pointsLeft).toBe(0);
 

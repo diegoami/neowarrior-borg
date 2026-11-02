@@ -15,22 +15,28 @@ interface Fake {
   readonly calls: string[];
 }
 
-/** A slot that holds its value in memory. */
-function slot(initial: JsonValue | null = null): Api2Slot & { held(): JsonValue | null } {
+/**
+ * A slot that holds its value in memory, optionally journaling each write's
+ * key set - the flag tests assert ORDER (the flag write is the last one before
+ * the create-character action), not just contents.
+ */
+function slot(initial: JsonValue | null = null, journal?: string[]): Api2Slot & { held(): JsonValue | null } {
   let value: JsonValue | null = initial;
   return {
     get: () => Promise.resolve({ ok: true as const, value }),
     set: (next) => {
       value = next;
+      const keys = next !== null && typeof next === "object" && !Array.isArray(next) ? Object.keys(next).sort() : [];
+      journal?.push(`slot-set ${keys.length === 0 ? "-" : keys.join(",")}`);
       return Promise.resolve({ ok: true as const, value: null });
     },
     held: () => value,
   };
 }
 
-/** A memory with no game storage behind it. */
-async function memory(ids: string[] = []): Promise<ProfileMemory> {
-  const held = installMemory(slot());
+/** A memory over the given slot (or a fresh one), so a test can share the slot with the row. */
+async function memory(ids: string[] = [], stored: ReturnType<typeof slot> = slot()): Promise<ProfileMemory> {
+  const held = installMemory(stored);
   if (ids.length > 0) await held.write(ids);
   return held;
 }
@@ -71,8 +77,12 @@ function host(answers: (number | null)[], options: { refuse?: Partial<Record<key
   };
 }
 
-async function pick(fake: Fake, held?: ProfileMemory): Promise<void> {
-  expect(registerBorgTitle({ id: "borg", title: fake.title, profiles: fake.profiles }, held ?? (await memory()))).toBe(true);
+async function pick(fake: Fake, held?: ProfileMemory, stored?: ReturnType<typeof slot>): Promise<void> {
+  /* The row's install slot. A test that wants the flag and the profileIds in
+   * ONE place passes the same slot to memory() and here; otherwise the row
+   * gets a slot of its own, which is all the profile-flow tests need. */
+  const slotArg = stored ?? slot();
+  expect(registerBorgTitle({ id: "borg", title: fake.title, profiles: fake.profiles, slot: slotArg }, held ?? (await memory([], slotArg)))).toBe(true);
   const row = fake.rows[0];
   if (row === undefined) throw new Error("no row");
   await row.run();
@@ -82,7 +92,7 @@ describe("the Borg title row", () => {
   it("registers its row under an id the game accepts", async () => {
     /* The game refuses any id outside a lowercase letter then lowercase letters, digits and hyphens, and says so only in its log. */
     const fake = host([]);
-    registerBorgTitle({ id: "borg", title: fake.title, profiles: fake.profiles }, await memory());
+    registerBorgTitle({ id: "borg", title: fake.title, profiles: fake.profiles, slot: slot() }, await memory());
     expect(fake.rows[0]?.id).toMatch(/^[a-z][a-z0-9-]{0,63}$/);
   });
 
@@ -179,6 +189,84 @@ describe("the Borg title row", () => {
     const fallback = host([0, 0, null], { refuse: { create: "No." } });
     await pick(fallback);
     expect(fallback.calls).toEqual(["create Borg fresh"]);
+  });
+
+  /* ------------------------------------------------------------------
+   * T05 (#8): the row arms the WARRIOR BIRTH, not just the controller. The
+   * one-shot flag (src/birth/presenter.ts) is set immediately before the
+   * create-character action - the commit point - and nowhere else, so a
+   * cancelled or refused start leaves nothing standing.
+   * ------------------------------------------------------------------ */
+
+  it("sets the one-shot birth flag immediately before the create-character action, as a sibling of the profile ids", async () => {
+    /* The separate-profile flow, over ONE shared install slot: the row's own
+     * profileIds write (its memory), then the flag, then the switch. The
+     * journal order is the assertion that matters: the flag write is the LAST
+     * write before the action that reloads the page, because after it there
+     * is no page left to set it on. */
+    const journal: string[] = [];
+    const stored = slot(null, journal);
+    const fake = host([0, 0]);
+    const held = await memory([], stored);
+    await pick(fake, held, stored);
+    expect(journal).toEqual(["slot-set profileIds", "slot-set profileIds,warriorBirth"]);
+    expect(fake.calls).toEqual(["create Borg fresh", "enable p1 borg", "switch p1 create-character true"]);
+    /* The shared-slot contract (#26): the flag lands BESIDE the row's
+     * profileIds, not in place of them. */
+    expect(stored.held()).toEqual({ profileIds: ["p1"], warriorBirth: true });
+    expect(await held.read()).toEqual(["p1"]);
+  });
+
+  it("arms the birth the same way in this profile, and arms nothing on Escape", async () => {
+    const stored = slot();
+    const here = host([1]);
+    await pick(here, undefined, stored);
+    expect(here.calls).toEqual(["switch null create-character true"]);
+    expect(stored.held()).toEqual({ warriorBirth: true });
+
+    /* Escape at the first prompt reaches no flag at all: a birth the player
+     * abandoned must not lie in the slot waiting for the next reload. */
+    const escaped = slot();
+    await pick(host([null]), undefined, escaped);
+    expect(escaped.held()).toBeNull();
+  });
+
+  it("clears the flag it set when the profile action is refused, so nothing is stranded", async () => {
+    /* A refused switchTo leaves the page alive: a flag still standing in the
+     * slot would take the NEXT character created after any later reload - a
+     * human's - as the presenter's own (the stranded-flag hazard,
+     * src/loop/restart.ts). The row takes its flag back, verified. */
+    const journal: string[] = [];
+    const stored = slot(null, journal);
+    const fake = host([1, 0], { refuse: { switchTo: "No character can start now." } });
+    await pick(fake, undefined, stored);
+    expect(journal).toEqual(["slot-set warriorBirth", "slot-set -"]);
+    expect(stored.held()).toBeNull();
+    expect(fake.asked[1]).toEqual({ title: "The Borg could not start the character: No character can start now.", choices: [GIVE_UP] });
+  });
+
+  it("starts nothing when the flag will not durably land, and says why (#25)", async () => {
+    /* A slot that answers ok to a write it swallowed is #25's exact shape:
+     * reloading into a flag that is not there births nothing at all, silently
+     * (no flag reads as the human path), so the row refuses to reload. */
+    const swallowed: Api2Slot = {
+      get: () => Promise.resolve({ ok: true as const, value: null }),
+      set: () => Promise.resolve({ ok: true as const, value: null }),
+    };
+    const fake = host([1]);
+    expect(registerBorgTitle({ id: "borg", title: fake.title, profiles: fake.profiles, slot: swallowed }, await memory())).toBe(true);
+    await fake.rows[0]!.run();
+    expect(fake.calls).toEqual([]);
+    expect(fake.asked[1]).toEqual({ title: "The Borg could not start the character: its birth flag would not settle in storage.", choices: [GIVE_UP] });
+  });
+
+  it("registers nothing without the install slot", async () => {
+    /* No install slot means no flag protocol: the presenter would never arm,
+     * so a row that promised a planned warrior would be lying. The Borg
+     * starts only from Ctrl-Z, as with a missing title or profile seam. */
+    const fake = host([]);
+    expect(registerBorgTitle({ id: "borg", title: fake.title, profiles: fake.profiles }, await memory())).toBe(false);
+    expect(fake.rows).toHaveLength(0);
   });
 });
 

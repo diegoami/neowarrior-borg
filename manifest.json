@@ -111,6 +111,17 @@
         "default": false,
         "requiresReload": true
       }
+    ],
+    "settings": [
+      {
+        "id": "borg.raceChoice",
+        "title": "Warrior race",
+        "description": "The race the Borg's planned warrior is born as: 0 Half-Troll, 1 Dunadan, 2 High-Elf, 3 Dwarf - the bake-off shortlist, in this order everywhere. Read at each birth, so a change applies to the next warrior.",
+        "min": 0,
+        "max": 3,
+        "step": 1,
+        "default": 0
+      }
     ]
   }
 }

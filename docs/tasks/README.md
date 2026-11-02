@@ -19,7 +19,8 @@ upstream-faithful throughout; measurement before divergence.
 | [T05](T05.md) | The title row arms the warrior, and a setting picks the race | Medium | #8 | T03 |
 | [T06](T06.md) | Run records: journal in the mod, tables outside it | Medium | #9 | T04 |
 | [T07](T07.md) | The baseline and the race bake-off | Medium | #10 | T04, T06 |
-| [T08](T08.md) | Milestone 0.1.0 | Easy | #11 | T02–T07 |
+| [T09](T09.md) | A random suited race for every warrior | Medium | #33 | T07 |
+| [T08](T08.md) | Milestone 0.1.0 | Easy | #11 | T02–T07, T09 |
 
 ## M2 - Deeper (planned)
 

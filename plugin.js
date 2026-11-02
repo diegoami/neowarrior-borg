@@ -33,7 +33,9 @@ function installMemory(slot) {
     async write(ids) {
       session = [...ids];
       try {
-        await slot.set({ profileIds: session });
+        const current = await slot.get();
+        const base = current.ok && current.value !== null && typeof current.value === "object" && !Array.isArray(current.value) ? current.value : {};
+        await slot.set({ ...base, profileIds: session });
       } catch {
       }
     }
@@ -16665,6 +16667,231 @@ function createTick(bridge2, borg) {
   };
 }
 
+// src/birth/plan.ts
+var WARRIOR_CLASS_NAME = "Warrior";
+var STAT_ORDER = ["STR", "INT", "WIS", "DEX", "CON"];
+var STAT_PRIORITY = ["STR", "CON", "DEX", "INT", "WIS"];
+function ladderFromCostTable(costs, base) {
+  const cap = costs.length - 1;
+  if (!Number.isInteger(base) || base < 0) {
+    throw new Error(`the cost table's base must be a non-negative integer, got ${String(base)}`);
+  }
+  if (costs.length < 2 || base >= cap) {
+    throw new Error("the cost table must offer at least one buyable value above its base");
+  }
+  const rows = [];
+  for (let v = base; v <= cap; v++) {
+    const buyCost = v < cap ? costs[v + 1] ?? 0 : null;
+    const sellRefund = v > base ? costs[v] ?? 0 : null;
+    rows.push({ buyCost, sellRefund, canBuy: buyCost !== null, canSell: sellRefund !== null });
+  }
+  return { base, rows };
+}
+function planWarriorBirth(input) {
+  const { catalogue, raceName: raceName2, costs } = input;
+  if (catalogue.stats.length !== STAT_ORDER.length || catalogue.stats.some((name, i) => name !== STAT_ORDER[i])) {
+    throw new Error(
+      `catalogue.stats must be the engine's STAT order (${STAT_ORDER.join(",")}), got ${catalogue.stats.join(",")}`
+    );
+  }
+  if (!Number.isInteger(catalogue.pointBudget) || catalogue.pointBudget < 0) {
+    throw new Error(
+      `catalogue.pointBudget must be a non-negative integer, got ${String(catalogue.pointBudget)}`
+    );
+  }
+  const cls = catalogue.classes.find((c) => c.name === WARRIOR_CLASS_NAME);
+  if (!cls) {
+    throw new Error(
+      `the catalogue has no "${WARRIOR_CLASS_NAME}" class; this plan pins it (available: ${catalogue.classes.map((c) => c.name).join(", ") || "none"})`
+    );
+  }
+  const race = catalogue.races.find((r) => r.name === raceName2);
+  if (!race) {
+    throw new Error(
+      `there is no race named "${raceName2}" in the catalogue (available: ${catalogue.races.map((r) => r.name).join(", ") || "none"})`
+    );
+  }
+  const n = catalogue.stats.length;
+  for (const [label, view] of [
+    ["race", race],
+    ["class", cls]
+  ]) {
+    if (view.statAdj.length !== n) {
+      throw new Error(
+        `the ${label} "${view.name}" needs ${String(n)} stat adjustments, got ${String(view.statAdj.length)}`
+      );
+    }
+  }
+  const { base, rows } = costs;
+  const cap = base + rows.length - 1;
+  if (rows.length === 0 || base < 0) {
+    throw new Error("the cost ladder needs a non-negative base and at least one row");
+  }
+  for (let v = base; v <= cap; v++) {
+    const row = rows[v - base];
+    if (!row) throw new Error(`the cost ladder has no row for value ${String(v)}`);
+    if (v === cap && (row.buyCost !== null || row.canBuy)) {
+      throw new Error("the cost ladder's top row must not offer a buy");
+    }
+    if (row.canBuy && row.buyCost === null) {
+      throw new Error(`the cost ladder row at ${String(v)} claims buyable with no cost`);
+    }
+  }
+  const priority = STAT_PRIORITY.map((name) => {
+    const i = catalogue.stats.indexOf(name);
+    if (i < 0) throw new Error(`catalogue.stats is missing the stat "${name}"`);
+    return i;
+  });
+  const stats = new Array(n).fill(base);
+  const pointsSpentPerStat = new Array(n).fill(0);
+  const steps = [];
+  let pointsLeft = catalogue.pointBudget;
+  for (const stat of priority) {
+    for (; ; ) {
+      const value = stats[stat] ?? 0;
+      const row = rows[value - base];
+      if (row === void 0) break;
+      if (!row.canBuy || row.buyCost === null) break;
+      if (row.buyCost > pointsLeft) break;
+      stats[stat] = value + 1;
+      pointsLeft -= row.buyCost;
+      pointsSpentPerStat[stat] = (pointsSpentPerStat[stat] ?? 0) + row.buyCost;
+      steps.push({ stat, from: value, to: value + 1, cost: row.buyCost });
+    }
+  }
+  const pointsSpent = catalogue.pointBudget - pointsLeft;
+  const effectiveStats = stats.map(
+    (value, i) => value + (race.statAdj[i] ?? 0) + (cls.statAdj[i] ?? 0)
+  );
+  return {
+    raceName: race.name,
+    className: cls.name,
+    baseStats: stats,
+    steps,
+    pointsSpent,
+    pointsLeft,
+    pointsSpentPerStat,
+    effectiveStats
+  };
+}
+
+// src/birth/presenter.ts
+var BIRTH_FLAG_KEY = "warriorBirth";
+function flagIsSet(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  return value[BIRTH_FLAG_KEY] === true;
+}
+function withoutFlag(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const kept = {};
+  let any = false;
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === BIRTH_FLAG_KEY) continue;
+    kept[key] = entry;
+    any = true;
+  }
+  return any ? kept : null;
+}
+var PENDING = { state: "pending" };
+var messageOf = (error) => error instanceof Error ? error.message : String(error);
+function createWarriorBirthPresenter(deps) {
+  let prepared = PENDING;
+  let spent = false;
+  void (async () => {
+    let arming;
+    try {
+      arming = await deps.slot.get();
+    } catch (error) {
+      prepared = { state: "unreadable", message: messageOf(error) };
+      return;
+    }
+    if (!arming.ok) {
+      prepared = { state: "unreadable", message: arming.message };
+      return;
+    }
+    if (!flagIsSet(arming.value)) {
+      prepared = { state: "not-ours" };
+      return;
+    }
+    const unconsumed = (message) => {
+      prepared = { state: "unconsumed", message };
+    };
+    try {
+      const current = await deps.slot.get();
+      if (!current.ok) return unconsumed(current.message);
+      if (flagIsSet(current.value)) {
+        const written = await deps.slot.set(withoutFlag(current.value));
+        if (!written.ok) return unconsumed(written.message);
+        const check = await deps.slot.get();
+        if (!check.ok) return unconsumed(check.message);
+        if (flagIsSet(check.value)) return unconsumed("it was still set after being cleared");
+      }
+      prepared = { state: "armed" };
+    } catch (error) {
+      unconsumed(messageOf(error));
+    }
+  })();
+  const attempt = (what, result) => {
+    if (result.ok) return true;
+    deps.log(`the Borg's warrior birth was refused at ${what}: ${result.reason}`);
+    return false;
+  };
+  return {
+    show(session) {
+      if (prepared.state === "pending") {
+        deps.log("the Borg's birth flag has not been read yet, so it leaves this birth to the game's own screens");
+        return void 0;
+      }
+      if (prepared.state === "unreadable") {
+        deps.log(`the Borg could not read its birth flag (${prepared.message}), so it leaves this birth to the game's own screens`);
+        return void 0;
+      }
+      if (prepared.state === "unconsumed") {
+        deps.log(
+          `the Borg could not durably clear its birth flag (${prepared.message}), so it leaves this birth to the game's own screens; the flag may still be set, and every later birth re-checks and declines the same way rather than risk taking one that is not ours`
+        );
+        return void 0;
+      }
+      if (prepared.state === "not-ours" || spent) return void 0;
+      spent = true;
+      let plan;
+      try {
+        plan = planWarriorBirth({
+          catalogue: session.catalogue(),
+          raceName: deps.raceName,
+          costs: ladderFromCostTable(deps.costTable, deps.statBase)
+        });
+      } catch (error) {
+        deps.log(
+          `the Borg declines to birth its warrior: ${error instanceof Error ? error.message : String(error)}`
+        );
+        return void 0;
+      }
+      if (!attempt(`chooseRace(${plan.raceName})`, session.chooseRace(plan.raceName))) return void 0;
+      if (!attempt(`chooseClass(${plan.className})`, session.chooseClass(plan.className))) return void 0;
+      if (!attempt("reset", session.reset())) return void 0;
+      for (const step of plan.steps) {
+        if (!attempt(`buy(${String(step.stat)} at ${String(step.from)})`, session.buy(step.stat))) return void 0;
+      }
+      const draft = session.draft();
+      if (draft.race !== plan.raceName || draft.cls !== plan.className || draft.stats.length !== plan.baseStats.length || draft.stats.some((value, i) => value !== plan.baseStats[i]) || draft.pointsLeft !== plan.pointsLeft) {
+        deps.log(
+          `the Borg declines to accept a warrior it did not plan: the session's draft (${draft.race ?? "?"} ${draft.cls ?? "?"} [${draft.stats.join(",")}] left ${String(draft.pointsLeft)}) is not the plan ([${plan.baseStats.join(",")}] left ${String(plan.pointsLeft)})`
+        );
+        return void 0;
+      }
+      if (draft.name.trim() === "") {
+        if (!attempt("randomName", session.randomName())) return void 0;
+      }
+      if (!attempt("accept", session.accept())) return void 0;
+      deps.log(
+        `the Borg birthed its ${plan.raceName} ${WARRIOR_CLASS_NAME} (base stats ${plan.baseStats.map((value) => String(value)).join("/")})`
+      );
+      return true;
+    }
+  };
+}
+
 // plugin.ts
 function characterAlreadyAutoplayed(context) {
   const state = context.engine?.state;
@@ -16692,6 +16919,21 @@ function cfgFromFlags(flags) {
 function changedFrom(cfg) {
   const stock = defaultCfg();
   return Object.entries(cfg).filter(([key, value]) => stock[key] !== value).map(([key, value]) => `${key}=${String(value)}`).sort();
+}
+var WARRIOR_BIRTH_RACE_PLACEHOLDER = "Half-Troll";
+function warriorBirth(mod2) {
+  const core = mod2.engine?.core;
+  if (core === void 0) {
+    mod2.meta.log("the Borg has no engine here, so the game shows its own character creation");
+    return void 0;
+  }
+  return createWarriorBirthPresenter({
+    slot: mod2.store.install,
+    log: (message) => mod2.meta.log(message),
+    raceName: WARRIOR_BIRTH_RACE_PLACEHOLDER,
+    costTable: core.BIRTH_STAT_COSTS,
+    statBase: core.BIRTH_STAT_BASE
+  });
 }
 var bridge;
 var running;
@@ -16727,6 +16969,10 @@ async function begin(mod2) {
 }
 var definition = {
   api: ">=2.0.0 <3.0.0",
+  /* FORK: T03 (#6) - the mod's own character creation, under
+   * ui:birth.replace. Flag-gated: without the flag the presenter declines and
+   * the game's own birth screens run as before. See warriorBirth above. */
+  birth: (mod2) => warriorBirth(mod2),
   async start(mod2) {
     running = begin(mod2).catch((error) => {
       mod2.meta.log(`the Borg could not start: ${error instanceof Error ? error.message : String(error)}`);

@@ -57,7 +57,8 @@
  * profile seams (title.ts).
  */
 
-import type { Api2ControllerContext, Api2InputState, Api2ModDefinition, ModApi2 } from "@rpgm-tools/neo-angband-mod-sdk";
+import type { Api2ControllerContext, Api2InputState, Api2ModDefinition, Api2BirthPresenter, ModApi2 } from "@rpgm-tools/neo-angband-mod-sdk";
+import type * as Core from "@rpgm-tools/neo-angband-core";
 import { installMemory, registerBorgTitle } from "./title.js";
 import { NOSCORE_BORG } from "./src/activate.js";
 import { createBorg } from "./src/controller.js";
@@ -66,6 +67,7 @@ import { defaultCfg, setBuffTimerSafetyNet, type BorgCfg } from "./src/trait/con
 import { createBridge, type Bridge } from "./src/api2/host.js";
 import { createTick, type Tick } from "./src/api2/controller.js";
 import { BORG_MARK, BORG_VIEW } from "./src/world/grid.js";
+import { createWarriorBirthPresenter } from "./src/birth/presenter.js";
 
 /**
  * Whether this character has already handed the keyboard to an autoplayer.
@@ -211,6 +213,42 @@ interface Running {
   readonly tick: Tick;
 }
 
+/**
+ * FORK: T03 (#6) - the race the birth presenter plans for, until T05's
+ * `raceChoice` setting replaces this constant with the setting's resolver.
+ * Candidate 0 of the bake-off shortlist (docs/tasks/T05.md): Half-Troll.
+ */
+const WARRIOR_BIRTH_RACE_PLACEHOLDER = "Half-Troll";
+
+/**
+ * FORK: T03 (#6) - the presenter under `ui:birth.replace` (already declared in
+ * manifest.json) that births the planned warrior when the mod's one-shot
+ * install-slot flag is set (by T04's restart loop and T05's title row), and
+ * declines otherwise so the game shows its own screens: a human creating a
+ * character is never hijacked. The engine's birth cost table is read here the
+ * same way the bridge reads the engine (mod.engine.core, cast as in
+ * src/api2/host.ts - a bundled engine copy is forbidden), because the
+ * presenter itself stays game-free. Without the engine there is no presenter;
+ * like the bridge's "no engine" start failure, that birth falls to the game.
+ * The protocol, its call sequence and its safety properties are documented in
+ * src/birth/presenter.ts.
+ */
+function warriorBirth(mod: ModApi2): Api2BirthPresenter | undefined {
+  const core = (mod.engine as { readonly core?: typeof Core } | undefined)?.core;
+  if (core === undefined) {
+    mod.meta.log("the Borg has no engine here, so the game shows its own character creation");
+    return undefined;
+  }
+  return createWarriorBirthPresenter({
+    slot: mod.store.install,
+    log: (message) => mod.meta.log(message),
+    raceName: WARRIOR_BIRTH_RACE_PLACEHOLDER,
+    costTable: core.BIRTH_STAT_COSTS,
+    statBase: core.BIRTH_STAT_BASE,
+  });
+}
+
+
 let bridge: Bridge | undefined;
 let running: Promise<Running | null> | undefined;
 
@@ -253,6 +291,11 @@ async function begin(mod: ModApi2): Promise<Running | null> {
 
 const definition: Api2ModDefinition = {
   api: ">=2.0.0 <3.0.0",
+
+  /* FORK: T03 (#6) - the mod's own character creation, under
+   * ui:birth.replace. Flag-gated: without the flag the presenter declines and
+   * the game's own birth screens run as before. See warriorBirth above. */
+  birth: (mod) => warriorBirth(mod),
 
   async start(mod) {
     running = begin(mod).catch((error: unknown) => {

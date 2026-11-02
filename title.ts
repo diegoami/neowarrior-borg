@@ -12,7 +12,7 @@
  * starts only from Ctrl-Z, as before.
  */
 
-import type { Api2Manage, Api2Profile, Api2ProfileAction, Api2Slot, Api2Title } from "@rpgm-tools/neo-angband-mod-sdk";
+import type { Api2Manage, Api2Profile, Api2ProfileAction, Api2Slot, Api2Title, JsonValue } from "@rpgm-tools/neo-angband-mod-sdk";
 
 /** The parts of the mod API the row reads. */
 export interface TitleCtx {
@@ -70,7 +70,19 @@ export function installMemory(slot: Pick<Api2Slot, "get" | "set">): ProfileMemor
     async write(ids) {
       session = [...ids];
       try {
-        await slot.set({ profileIds: session as string[] });
+        /* FORK: T03 fixes (#26) - the install slot is shared with the birth
+         * presenter's one-shot warriorBirth flag (src/birth/presenter.ts),
+         * so this write carries every sibling key forward instead of
+         * replacing the whole object: a replace here would erase a pending
+         * flag and cost the restart loop its next warrior. Read what is
+         * there, write it back with ours changed - the same read-modify-
+         * write the presenter consumes the flag under. */
+        const current = await slot.get();
+        const base = current.ok && current.value !== null &&
+            typeof current.value === "object" && !Array.isArray(current.value)
+          ? (current.value as Record<string, JsonValue>)
+          : {};
+        await slot.set({ ...base, profileIds: session as string[] });
       } catch {
         /* Kept for this session only. */
       }

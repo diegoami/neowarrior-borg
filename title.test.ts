@@ -200,4 +200,15 @@ describe("the Borg's profile memory", () => {
     await held.write(["p9"]);
     expect(await held.read()).toEqual(["p9"]);
   });
+
+  it("carries sibling keys forward, so a pending birth flag survives a profileIds write (#26)", async () => {
+    /* The install slot is shared with the birth presenter's one-shot
+     * warriorBirth flag (src/birth/presenter.ts). A write that replaced the
+     * whole object would erase a pending flag and cost the restart loop its
+     * next warrior, so write() keeps every key it did not come to change. */
+    const stored = slot({ profileIds: ["p1"], warriorBirth: true });
+    await installMemory(stored).write(["p2"]);
+    expect(stored.held()).toEqual({ profileIds: ["p2"], warriorBirth: true });
+    expect(await installMemory(stored).read()).toEqual(["p2"]);
+  });
 });

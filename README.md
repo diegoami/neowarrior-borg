@@ -21,7 +21,7 @@ came from, the way the port marks its own deviations.
 
 - **Birth is automated.** The title screen's **New Warrior Borg character** row
   (key B) starts a character whose creation this mod completes itself: Warrior
-  class, a race chosen from a measured shortlist, and a point-buy computed from
+  class, a race chosen from a measured shortlist (the `borg.raceChoice` setting), and a point-buy computed from
   the real stat-adjustment and cost tables rather than the game's generic
   suggestion. A human creating a character the ordinary way is left alone -
   the automated birth only runs for characters this mod is starting.

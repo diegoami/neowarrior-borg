@@ -40,18 +40,21 @@ One directory per measured session: `YYYY-MM-DD-<label>/` containing:
   rewrite the shared object mid-sweep. Break the hardlink (or isolate the
   store) before patching, fingerprint (md5) at the START AND END of every
   variant, keep the saved original outside git, and restore with `cmp` as
-  the proof. The T07 bake-off ran before this rule and proves its phases
-  behaviorally instead (its README's leak addendum); later records follow
-  the rule.
+  the proof. The T07 bake-off ran before this rule; its phases are
+  reconstructed from the retained fingerprints, with the limits of that
+  reconstruction recorded in its README's corrected proof note (review
+  #37); later records follow the rule.
 - `README.md` - the curated table a human reads, plus the context the JSON
   cannot carry: which commit played, which engine and content, what changed
   since the previous session, and what the numbers mean for the next task.
 
 The in-mod half of the record is the journal (`src/records/journal.ts`):
-depth milestones from the `dungeonlevel` event and a graveyard entry per run
-report, in the character's own save storage - the same records the harness
-asserts against the live game, so the mod's view and the committed tables
-cannot quietly diverge.
+depth milestones from the `dungeonlevel` event in the character's own save
+storage, and a graveyard entry per run report in the INSTALL storage that
+outlives the character (#34 - the host deletes the character's save before
+the report publishes) - the same records the harness asserts against the
+live game, so the mod's view and the committed tables cannot quietly
+diverge.
 
 A watched desktop run (a human or a CDP driver watching the real window) adds
 `watched.md` in the same shape the upstream mod's PLANNED.md used: what was

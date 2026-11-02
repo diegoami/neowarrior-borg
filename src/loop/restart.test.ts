@@ -30,9 +30,11 @@
  * slot's storage, or on the create call itself. Each such report must be
  * dropped by the epoch - no flag write, no create, no claim in the log -
  * with one deliberate exception asserted below: a flag the cancelled report
- * had already written is still cleared (verified), and a create it had
- * already issued still has its failure contained, because neither hazard
- * cares what retired the loop.
+ * had written - or had asked to write without its verification completing
+ * (#35: a refused or rejected read-back cannot prove the write did not
+ * land) - is still cleared (verified), and a create it had already issued
+ * still has its failure contained, because neither hazard cares what
+ * retired the loop.
  *
  * THE ORDER CONTRACT (flag set BEFORE create, exactly one flag-set per
  * create) is asserted from the slot's own contents CAPTURED AT THE MOMENT
@@ -42,6 +44,7 @@
 
 import { describe, expect, it } from "vitest";
 import type {
+  Api2BirthSession,
   Api2Call,
   Api2CreateCharacter,
   Api2Events,
@@ -51,6 +54,7 @@ import type {
   RunReport,
 } from "@rpgm-tools/neo-angband-mod-sdk";
 import { BIRTH_FLAG_KEY } from "../birth/presenter.js";
+import { createWarriorBirthPresenter } from "../birth/presenter.js";
 import { installWarriorRestart } from "./restart.js";
 
 /* ==================================================================
@@ -140,6 +144,99 @@ function parkingFirstGetSlot(initial: JsonValue | null, gate: Promise<void>): Ap
     },
     held: () => value,
   };
+}
+
+/**
+ * The #35 shape: the flag's WRITE lands (first get and set behave), then the
+ * durability READ-BACK - the second get - parks on a gate, and when the test
+ * releases it, it answers `unproven`: a REFUSED read or a REJECTED one, the
+ * two shapes flagIsDurable collapses to false while the write may still have
+ * landed. Later gets behave normally. `setsAllowed` caps how many writes the
+ * slot takes (1 = the flag's own write only), for the variant where the
+ * retirement's cleanup cannot land either.
+ */
+function parkingReadBackSlot(
+  initial: JsonValue | null,
+  gate: Promise<void>,
+  unproven: "refused" | "rejected",
+  setsAllowed = Number.POSITIVE_INFINITY,
+): Api2Slot & { held(): JsonValue | null } {
+  let value: JsonValue | null = initial;
+  let gets = 0;
+  let writes = 0;
+  return {
+    get: () => {
+      gets += 1;
+      if (gets !== 2) return Promise.resolve({ ok: true as const, value: structuredClone(value) });
+      return gate.then(() => {
+        if (unproven === "refused") {
+          return Promise.resolve({ ok: false as const, reason: "refused" as const, code: "refused", message: "storage winked" });
+        }
+        return Promise.reject(new Error("storage winked"));
+      });
+    },
+    set: (next) => {
+      writes += 1;
+      if (writes > setsAllowed) {
+        return Promise.resolve({ ok: false as const, reason: "refused" as const, code: "refused", message: "storage is full" });
+      }
+      value = next;
+      return Promise.resolve({ ok: true as const, value: null });
+    },
+    held: () => value,
+  };
+}
+
+/**
+ * An ordinary birth session that records every call (#35's last assertion):
+ * the presenter's show() must not touch it AT ALL when no flag stands - that
+ * untouched-ness is the human-safety property a stranded flag would have
+ * violated, which is why the fake records instead of refusing: a refusal
+ * would let a takeover attempt pass unnoticed.
+ */
+function ordinaryBirth(seen: string[]): Api2BirthSession {
+  return {
+    catalogue: () => {
+      seen.push("catalogue");
+      return {
+        ok: true,
+        value: {
+          races: [{ name: "Half-Troll", statAdj: [4, -2, -2, -2, 3] }],
+          classes: [{ name: "Warrior", statAdj: [3, -2, -2, 2, 2] }],
+          stats: ["STR", "INT", "WIS", "DEX", "CON"],
+          pointBudget: 24,
+        },
+      };
+    },
+    chooseRace: (race: string) => {
+      seen.push(`chooseRace(${race})`);
+      return { ok: true as const };
+    },
+    chooseClass: (cls: string) => {
+      seen.push(`chooseClass(${cls})`);
+      return { ok: true as const };
+    },
+    reset: () => {
+      seen.push("reset");
+      return { ok: true as const };
+    },
+    buy: (stat: number) => {
+      seen.push(`buy(${String(stat)})`);
+      return { ok: true as const };
+    },
+    draft: () => {
+      seen.push("draft");
+      return { race: "Half-Troll", cls: "Warrior", name: "", stats: [10, 10, 10, 10, 10], pointsLeft: 24 };
+    },
+    randomName: () => {
+      seen.push("randomName");
+      return { ok: true as const };
+    },
+    accept: () => {
+      seen.push("accept");
+      return { ok: true as const };
+    },
+  } as unknown as Api2BirthSession;
 }
 
 type CreateMode = "ok" | "refused" | "throw" | "reject";
@@ -504,6 +601,96 @@ describe("the warrior restart loop", () => {
     const said = f.logs().join(" ");
     expect(said).toContain("flag was cleared and no next warrior is started");
     expect(said).not.toContain("starting the next one");
+  });
+
+  /* ------------------------------------------------------------------
+   * #35 - the stranded flag a failed verification left behind
+   * ------------------------------------------------------------------ */
+
+  for (const unproven of ["refused", "rejected"] as const) {
+    it(`clears a flag whose read-back ${unproven === "refused" ? "was refused" : "rejected"} when the loop stops mid-verification`, async () => {
+      /* #35's storage shape, the one the retired branch used to skip: the
+       * flag write LANDS (the slot takes it), the durability read-back is
+       * the call that fails - refused, or rejected - and the stop lands
+       * while that read is parked. `standing === false` after that means
+       * "could not see it", not "not there", so the retirement must still
+       * attempt VERIFIED cleanup; nothing here may create, and the next
+       * presenter - built fresh on the same slot, the way the host builds
+       * it on every page - must find no flag and take no unrequested
+       * birth. This is the M1 worst-failure-mode property. */
+      let releaseVerify!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        releaseVerify = resolve;
+      });
+      const theSlot = parkingReadBackSlot({ profileIds: ["p1"] }, gate, unproven);
+      const f = await installed({ slot: theSlot, create: createRecorder("ok", theSlot) });
+
+      f.bus.report({ key: "cedar", report: report("death") });
+      await settle(8); /* the flag write landed; the read-back is parked */
+      expect((f.held() as Record<string, unknown>)[BIRTH_FLAG_KEY]).toBe(true);
+      await f.restart.stop();
+
+      const seen = await unhandledRejections(() => {
+        releaseVerify(); /* the verification fails - after the stop */
+      });
+      expect(seen).toEqual([]);
+
+      /* NO create, the flag durably CLEARED, the sibling preserved. */
+      expect(f.created()).toEqual([]);
+      expect(f.held()).toEqual({ profileIds: ["p1"] });
+      const said = f.logs().join(" ");
+      expect(said).toContain("the flag was cleared and no next warrior is started");
+      expect(said).not.toContain("starting the next one");
+
+      /* AND NO TAKEOVER BY THE NEXT PRESENTER: a fresh presenter on this
+       * slot, offered an ordinary birth with no new title or restart
+       * request, touches nothing - a human's birth stays theirs. */
+      const touched: string[] = [];
+      const presenter = createWarriorBirthPresenter({
+        slot: theSlot,
+        log: () => undefined,
+        raceName: "Half-Troll",
+        costTable: [],
+        statBase: 10,
+      });
+      await settle();
+      expect(presenter.show(ordinaryBirth(touched))).toBeUndefined();
+      expect(touched).toEqual([]);
+    });
+  }
+
+  it("names a flag it cannot clear after a failed verification, instead of pretending it is gone", async () => {
+    /* The same #35 shape with the cleanup's own write refused: the slot
+     * took the flag's write and nothing else. The verification still
+     * cannot prove absence, so the cleanup must be ATTEMPTED - and when
+     * even it cannot verify, the log keeps the explicit stranded-flag
+     * warning that names the consequence, exactly as the issue requires. */
+    let releaseVerify!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseVerify = resolve;
+    });
+    const theSlot = parkingReadBackSlot({ profileIds: ["p1"] }, gate, "refused", 1);
+    const f = await installed({ slot: theSlot, create: createRecorder("ok", theSlot) });
+
+    f.bus.report({ key: "cedar", report: report("death") });
+    await settle(8); /* the flag write landed (the slot's one write); the read-back is parked */
+    expect((f.held() as Record<string, unknown>)[BIRTH_FLAG_KEY]).toBe(true);
+    await f.restart.stop();
+
+    const seen = await unhandledRejections(() => {
+      releaseVerify();
+    });
+    expect(seen).toEqual([]);
+    expect(f.created()).toEqual([]);
+
+    /* The flag could not be cleared, and the log says the truthful thing:
+     * the flag may still be set, and whose birth it could take. */
+    expect((f.held() as Record<string, unknown>)[BIRTH_FLAG_KEY]).toBe(true);
+    expect((f.held() as Record<string, unknown>)["profileIds"]).toEqual(["p1"]);
+    const said = f.logs().join(" ");
+    expect(said).toContain("could not be durably cleared");
+    expect(said).toContain("a human's birth could be taken");
+    expect(said).not.toContain("the flag was cleared");
   });
 
   it("still contains a create whose refusal arrives after the loop stopped", async () => {

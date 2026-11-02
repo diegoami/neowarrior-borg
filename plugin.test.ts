@@ -21,9 +21,11 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import * as Core from "@rpgm-tools/neo-angband-core";
-import type { Api2ControllerContext, Api2ModDefinition, Api2Prompt } from "@rpgm-tools/neo-angband-mod-sdk";
+import type { Api2ControllerContext, Api2ModDefinition, Api2Prompt, JsonValue } from "@rpgm-tools/neo-angband-mod-sdk";
 import { fakeGame, type FakeGame, type FakeGameOptions } from "./src/harness-api2.js";
 import type { Scenario } from "./src/harness.js";
+import { BIRTH_FLAG_KEY } from "./src/birth/presenter.js";
+import { GRAVEYARD_KEY, graveyardArchiveOf } from "./src/records/journal.js";
 
 /* The BUILT file, on purpose. If plugin.js is stale or missing this fails, which
  * is correct: `pnpm check` proves it is a current build of the source, and
@@ -182,39 +184,74 @@ describe("the built plugin.js", () => {
      * exactly resumeAutoplayer (never `like`), and the slot keeps the
      * title row's sibling key - the shared-slot contract (#26). */
     const game = await begin();
-    const report = { key: "cedar", report: { outcome: "death", cause: "a novice mage", maxDepth: 3, turn: 99 } };
+    const report = { key: "cedar", report: { key: "cedar", outcome: "death", cause: "a novice mage", maxDepth: 3, turn: 99 } };
     game.listeners.get("run-end")?.(report as never);
     for (let i = 0; i < 32; i++) await Promise.resolve();
     expect(game.created).toEqual([{ resumeAutoplayer: true }]);
-    /* The slot's whole contents at rest: the flag standing for the next
-     * page's presenter (a fresh fake slot had no siblings to keep). */
-    expect(game.installSlot.value).toEqual({ warriorBirth: true });
-    /* T06: the run that ended is recorded in the CHARACTER's slot - the
-     * partial report this fake sends still names the outcome and the
-     * killer, and the entry says null rather than a guess for the rest. */
-    const journal = game.characterSlot.value as { graveyard?: Array<Record<string, unknown>> };
-    expect(journal.graveyard).toEqual([
-      expect.objectContaining({ outcome: "death", cause: "a novice mage", maxDepth: 3, turn: 99 }),
+    /* The install slot's whole contents at rest: the flag standing for the
+     * next page's presenter, BESIDE the ended run's archive entry (#34) -
+     * two siblings of one shared value, each write carrying the other. */
+    const install = game.installSlot.value as Record<string, unknown>;
+    expect(install[BIRTH_FLAG_KEY]).toBe(true);
+    expect(graveyardArchiveOf(install[GRAVEYARD_KEY] as JsonValue).runs).toEqual([
+      expect.objectContaining({ run: "cedar", outcome: "death", cause: "a novice mage", maxDepth: 3, turn: 99 }),
     ]);
+    /* T06, corrected by #34: the ended run is recorded in INSTALL storage,
+     * not the character's bag - the host deletes that bag at the death,
+     * before the report even publishes. The partial report this fake sends
+     * still names the outcome and the killer, and the entry says null
+     * rather than a guess for the rest. The character's own slot keeps
+     * only what may die with it: nothing recorded a depth here. */
+    expect(game.characterSlot.value).toBeNull();
   });
 
-  it("records the run that ended in the character's save BEFORE it creates the next warrior", async () => {
-    /* T06's ordering, witnessed at the moment create ran: the graveyard
-     * entry must already be standing in the character's slot, because the
-     * page teardown a successful create causes is exactly the hazard the
+  it("keeps the ended run retrievable after the dead character's own save is gone (#34)", async () => {
+    /* THE HOST'S DEATH ORDER, as the review verified it in the game's own
+     * source: markDead removes the character's save and detaches its slot
+     * BEFORE the run report publishes, and create's reload builds the next
+     * character a bag that never saw this one. Death -> report -> the
+     * character bag gone -> a fresh read of install storage still
+     * retrieves the ended run. */
+    const game = await begin();
+    game.listeners.get("run-end")?.({ key: "cedar", report: { key: "cedar", outcome: "death", cause: "a novice mage", maxDepth: 3, turn: 99 } } as never);
+    for (let i = 0; i < 32; i++) await Promise.resolve();
+    expect(game.created).toEqual([{ resumeAutoplayer: true }]);
+    expect(game.characterSlot.value).toBeNull();
+
+    /* The character's bag is gone with the page; a later page - a fresh
+     * game over the same install - reads the archive cold. */
+    const freshInstall = structuredClone(game.installSlot.value) as JsonValue;
+    const retrieved = graveyardArchiveOf((freshInstall as Record<string, unknown>)[GRAVEYARD_KEY] as JsonValue);
+    expect(retrieved.runs).toEqual([
+      expect.objectContaining({ run: "cedar", outcome: "death", cause: "a novice mage", maxDepth: 3, turn: 99 }),
+    ]);
+    await built.stop?.();
+  });
+
+  it("archives the run that ended BEFORE it creates the next warrior", async () => {
+    /* T06's ordering, witnessed at the moment create ran: the archive entry
+     * must already be standing in INSTALL storage, because the page
+     * teardown a successful create causes is exactly the hazard the
      * ordering exists for. Read from the slot's own contents captured
      * inside the create, not from anything the mod promised. */
     const atCreate: unknown[] = [];
     const game = await begin({
-      onCreate: () => atCreate.push(structuredClone(game.characterSlot.value)),
+      onCreate: () => atCreate.push(structuredClone(game.installSlot.value)),
     });
-    const report = { key: "cedar", report: { outcome: "death", cause: "a grey mold", maxDepth: 2, turn: 500 } };
+    const report = { key: "cedar", report: { key: "cedar", outcome: "death", cause: "a grey mold", maxDepth: 2, turn: 500 } };
     game.listeners.get("run-end")?.(report as never);
     for (let i = 0; i < 32; i++) await Promise.resolve();
     expect(game.created).toEqual([{ resumeAutoplayer: true }]);
     expect(atCreate).toHaveLength(1);
-    const witnessed = atCreate[0] as { graveyard?: Array<Record<string, unknown>> };
-    expect(witnessed.graveyard?.[0]).toMatchObject({ outcome: "death", cause: "a grey mold" });
+    const witnessed = atCreate[0] as Record<string, unknown>;
+    /* The archive entry AND the flag were both standing when create ran -
+     * journal, then flag, then create. */
+    expect(graveyardArchiveOf(witnessed[GRAVEYARD_KEY] as JsonValue).runs[0]).toMatchObject({
+      run: "cedar",
+      outcome: "death",
+      cause: "a grey mold",
+    });
+    expect(witnessed[BIRTH_FLAG_KEY]).toBe(true);
   });
 
   it("records a depth milestone when its warrior arrives on a level", async () => {
@@ -235,21 +272,30 @@ describe("the built plugin.js", () => {
 
   it("starts nothing at a death it did not drive, and nothing without the roster seam", async () => {
     const drivenByOther = await begin({ ownsKeyboard: false });
-    drivenByOther.listeners.get("run-end")?.({ key: "cedar", report: { outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
+    drivenByOther.listeners.get("run-end")?.({ key: "cedar", report: { key: "cedar", outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
     for (let i = 0; i < 32; i++) await Promise.resolve();
     expect(drivenByOther.created).toEqual([]);
-    expect(drivenByOther.installSlot.value).toBeNull();
     /* T06: the run that ended is still recorded - a dead warrior is a dead
      * warrior whoever held the keyboard; it is the NEXT one this mod will
-     * not start. */
-    const journal = drivenByOther.characterSlot.value as { graveyard?: Array<Record<string, unknown>> };
-    expect(journal.graveyard).toEqual([expect.objectContaining({ outcome: "death", cause: "x" })]);
+     * not start. Since #34 the record is the install archive, so the
+     * install slot carries the ended run and NO birth flag - the flag is
+     * the one thing a non-driving death must never leave behind. */
+    const recorded = drivenByOther.installSlot.value as Record<string, unknown>;
+    expect(recorded[BIRTH_FLAG_KEY]).toBeUndefined();
+    expect(graveyardArchiveOf(recorded[GRAVEYARD_KEY] as JsonValue).runs).toEqual([
+      expect.objectContaining({ run: "cedar", outcome: "death", cause: "x" }),
+    ]);
+    expect(drivenByOther.characterSlot.value).toBeNull();
 
     const noSeam = await begin({ saves: "absent" });
-    noSeam.listeners.get("run-end")?.({ key: "cedar", report: { outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
+    noSeam.listeners.get("run-end")?.({ key: "cedar", report: { key: "cedar", outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
     for (let i = 0; i < 32; i++) await Promise.resolve();
     expect(noSeam.created).toEqual([]);
-    expect(noSeam.installSlot.value).toBeNull();
+    /* No roster seam starts nothing, but the run is recorded all the same:
+     * the archive is not the roster seam. */
+    const noSeamInstall = noSeam.installSlot.value as Record<string, unknown>;
+    expect(graveyardArchiveOf(noSeamInstall[GRAVEYARD_KEY] as JsonValue).runs).toHaveLength(1);
+    expect(noSeamInstall[BIRTH_FLAG_KEY]).toBeUndefined();
     expect(said(noSeam)).toContain("no character-creation seam");
   });
 
@@ -268,7 +314,7 @@ describe("the built plugin.js", () => {
 
     expect(game.listeners.has("run-end")).toBe(false);
     expect(game.listeners.has("dungeonlevel")).toBe(false);
-    game.listeners.get("run-end")?.({ key: "cedar", report: { outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
+    game.listeners.get("run-end")?.({ key: "cedar", report: { key: "cedar", outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(game.created).toEqual([]);
     expect(game.installSlot.value).toBeNull();
@@ -296,12 +342,12 @@ describe("the built plugin.js", () => {
     expect(gameB.listeners.has("run-end")).toBe(true);
 
     /* The newer loop is still the live one: a death restarts through it. */
-    gameB.listeners.get("run-end")?.({ key: "cedar", report: { outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
+    gameB.listeners.get("run-end")?.({ key: "cedar", report: { key: "cedar", outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
     for (let i = 0; i < 32; i++) await Promise.resolve();
     expect(gameB.created).toEqual([{ resumeAutoplayer: true }]);
 
     /* And the older game's bus has no listener at all. */
-    gameA.listeners.get("run-end")?.({ key: "cedar", report: { outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
+    gameA.listeners.get("run-end")?.({ key: "cedar", report: { key: "cedar", outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
     for (let i = 0; i < 32; i++) await Promise.resolve();
     expect(gameA.created).toEqual([]);
   });

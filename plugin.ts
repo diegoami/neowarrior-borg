@@ -411,18 +411,26 @@ async function begin(mod: ModApi2): Promise<Running | null> {
     grid.feat = 0;
     grid.info &= ~(BORG_MARK | BORG_VIEW);
   };
-  /* FORK: T06 (#9) - the journal, installed BEFORE the restart loop so the
-   * loop can be handed the graveyard writer it awaits ahead of its
-   * flag/create sequence. Every piece is again a slice of this mod's own
-   * context: the character's slot in its own save (the host scopes it to the
-   * character, which is what "stored under ctx.character.key()" means in
-   * API 2), the log, the event domain the level arrivals arrive on (the
+  /* FORK: T06 (#9), corrected by #34 - the journal, installed BEFORE the
+   * restart loop so the loop can be handed the graveyard writer it awaits
+   * ahead of its flag/create sequence. Every piece is again a slice of this
+   * mod's own context: the character's slot in its own save (the host scopes
+   * it to the character, which is what "stored under ctx.character.key()"
+   * means in API 2) carries the LIVING character's depth milestones, and the
+   * INSTALL slot carries the graveyard archive - the substrate whose
+   * lifetime survives the character, because the host's death order deletes
+   * the character's save (markDead) before the run report even publishes,
+   * and a graveyard written only to the character's bag was a record no
+   * later page could read (#34's finding). The same shared value carries the
+   * lineage counter and the birth flag, so the archive's writes preserve
+   * siblings. The log, the event domain the level arrivals arrive on (the
    * manifest's event:dungeonlevel grant), and the cheap stamps - the
    * character's level from the player read the mod already holds, the turn
-   * from the world snapshot it already reads per decision. The protocol and
-   * the dedup rule are documented in src/records/journal.ts. */
+   * from the world snapshot it already reads per decision - complete it.
+   * The protocol and the dedup rule are documented in src/records/journal.ts. */
   const journal = installWarriorJournal({
     slot: mod.store.character,
+    archive: mod.store.install,
     log: (message) => mod.meta.log(message),
     events: mod.events,
     stamps: async () => {

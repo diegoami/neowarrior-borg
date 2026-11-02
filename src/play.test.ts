@@ -623,12 +623,14 @@ suite("the warrior restart loop, headless", () => {
         expect({ level: milestone.level, turn: milestone.turn }).toEqual(life.arrivalStamps.get(milestone.depth));
       }
 
-      /* THE GRAVEYARD: one entry per DEAD warrior, with the killer the game
-       * reported (the player's own died-from, read from the live player).
-       * A survivor's slot holds no entry: no run ended. */
+      /* THE GRAVEYARD (#34): one archived entry per DEAD warrior, read from
+       * the INSTALL archive the driver's journal writes into - the storage
+       * that survives the character - never from the character's own bag,
+       * which the host deletes at the death. A survivor archives no entry:
+       * no run ended. */
       if (life.dead) {
-        expect(journal!.graveyard).toHaveLength(1);
-        expect(journal!.graveyard[0]).toMatchObject({
+        expect(life.graveyard).toHaveLength(1);
+        expect(life.graveyard[0]).toMatchObject({
           outcome: "death",
           cause: life.causeOfDeath,
           name: expect.any(String),
@@ -642,8 +644,30 @@ suite("the warrior restart loop, headless", () => {
           score: expect.any(Number),
         });
       } else {
-        expect(journal!.graveyard).toEqual([]);
+        expect(life.graveyard).toEqual([]);
       }
+
+      /* THE CENSUS AGAINST THE COUNT (#36), asserted independently of the
+       * reported counter: the harness counts commands as the controller
+       * issues them, and the killing decision is a decision like any other
+       * - sum(commands) === decisions on every recorded run, death or
+       * survival. (The driver enforces the same equality and throws; this
+       * is the outside check over what it reported.) */
+      const issued = Object.values(life.commands).reduce((a, b) => a + b, 0);
+      expect(issued, `seed ${String(life.seed)}: census vs decisions`).toBe(life.decisions);
+    }
+
+    /* #34's REQUIRED READ, after every character's bag is gone: the
+     * session-wide install archive still retrieves EVERY ended run - each
+     * life's character slot was discarded when the next warrior booted,
+     * which is the harness's stand-in for the host deleting the dead
+     * character's save. */
+    const ended = session.lives.filter((life) => life.dead);
+    expect(ended.length).toBeGreaterThanOrEqual(1);
+    expect(session.graveyard).toHaveLength(ended.length);
+    for (const life of ended) {
+      const match = session.graveyard.find((entry) => entry.outcome === "death" && entry.cause === life.causeOfDeath && entry.turn === life.turns);
+      expect(match, `the ended run of seed ${String(life.seed)} is no longer retrievable from install storage`).toBeDefined();
     }
 
     /* THE REPORTER'S runs.json, FIELD BY FIELD against the lives (each of

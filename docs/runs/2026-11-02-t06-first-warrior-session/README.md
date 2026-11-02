@@ -8,6 +8,20 @@ false`; this directory is what T06 exists to produce - the runs.json the
 reporter emitted (never hand-assembled) and the journal's own record of
 depths and deaths asserted against the live game by the session test.
 
+## ERRATUM (added 2026-11-02, review #36): every death entry undercounts `decisions` by one
+
+All four lives here ended in death, and the driver this record was produced
+with counted a decision only when the play loop's header ran its increment -
+the killing decision was issued (it is in each run's command census) but
+never added to `decisions`. Each of the four `decisions` numbers below and
+in `runs.json` reads exactly one lower than the decisions actually taken
+(363/369/44/244 recorded; 364/370/45/245 issued; `sum(commands) ==
+decisions + 1` on every entry). The driver is fixed and now asserts the
+census equals the count independently; the committed JSON is immutable
+(rule 7) and stays as recorded. Every other field is exact, so the
+narrative above stands. The same defect affects the bake-off record's 21
+death entries - its own erratum says the numbers.
+
 - **Build**: the T06 branch `task/T06-run-records` (the `T06:` commits);
   the reporter records the mod as `Warrior Borg 0.1.0` from manifest.json
   and refuses to guess a commit, on purpose - a record that pins a SHA goes

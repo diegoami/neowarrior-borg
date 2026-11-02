@@ -22,10 +22,40 @@ always comes back - born planned, reborn on every death, recorded every run.
 - [Visible] **The warrior always comes back.** A death ends its character
   (`onDeath: "end"`) and the loop rebirths the same plan
   (`create({ resumeAutoplay: true })`), unattended.
-- [Visible] **The run is recorded.** An in-mod journal - depth milestones and
-  a graveyard entry per character - plus committed session records under
-  `docs/runs/`: the import baseline, the first warrior session, and the
-  64-life race bake-off across two engine variants.
+- [Visible] **The run is recorded.** An in-mod journal - depth milestones in
+  the character's save, and a graveyard entry per ended run in INSTALL
+  storage, where it outlives the character the host deletes at the death -
+  plus committed session records under `docs/runs/`: the import baseline,
+  the first warrior session, and the 64-life race bake-off across two
+  engine variants.
+- [Fix, review #34] **Ended runs survive their character.** The graveyard
+  was written only to the character's own save bag, which the host deletes
+  before the run report publishes - every unattended restart silently
+  discarded the record. Finished runs now archive in the install slot
+  (keyed by the run key, siblings preserved), awaited before the loop's
+  birth flag and create; the character bag keeps the living character's
+  depth milestones.
+- [Fix, review #35] **A stopped loop can no longer strand a birth flag on a
+  failed read-back.** Retirement cleanup ran only when the flag's
+  verification succeeded; a refused or rejected read-back skipped it
+  although the write may have landed, and the next presenter could take an
+  unrequested human birth. Cleanup is now attempted - and verified -
+  whenever the report reached the flag step, with a loud honest warning
+  kept for the case where even the clear cannot verify.
+- [Fix, review #36] **Death runs count the killing decision.** The session
+  driver's loop incremented after the death break, so every death entry in
+  the committed records undercounts `decisions` by exactly one (21 bake-off
+  entries, 4 T06 entries; errata recorded beside the immutable JSON). The
+  completed decision is counted before the break, and the driver now
+  asserts the command census equals the count, independently of the
+  reported counter.
+- [Docs, review #37] **The bake-off README's shared-store proof is
+  corrected.** Differing cells prove the loaded engine module was the
+  patched one for the whole single-process sweep; they cannot prove the
+  shared inode was never rewritten on disk. The README now says what the
+  retained fingerprints and the 1500-probe divergence do and do not
+  establish, and the future-sweep protocol (hardlink isolation +
+  start/end fingerprints) stands.
 - [Internal] One session driver behind the play tests, `tools/runs.mjs` and
   `tools/bakeoff.mjs`; the patched-engine variant protocol (byte-proven
   apply/revert) and the pnpm shared-store leak hazard are documented in

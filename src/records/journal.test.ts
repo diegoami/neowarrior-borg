@@ -1,23 +1,30 @@
 /**
  * TESTS FOR THE JOURNAL, against fakes shaped like the host's own calls.
  *
- * The journal writes through two host seams it did not make - the character's
- * slot in its own save (mod.store.character) and the event domain the
+ * The journal writes through host seams it did not make - the character's
+ * slot in its own save (mod.store.character), the INSTALL slot the graveyard
+ * archive lives in (mod.store.install, #34), and the event domain the
  * `dungeonlevel` arrivals arrive on - so the fakes here answer the way the
  * host's own source answers (a slot answers ok to a write it swallowed, a
  * call never throws for an ordinary refusal), the same discipline
  * restart.test.ts and presenter.test.ts keep.
  *
- * THE TWO RULES THE TASK PINS, each tested on its own:
+ * THE THREE RULES THE TASKS PIN, each tested on its own:
  *
  *   1. ONE MILESTONE PER DEPTH PER CHARACTER, including across the
- *      `cause: "load"` re-fire the docs warn about (MOD_SEAMS 4l and 4w): the
- *      dedup is a comparison against what is already stored, never a
+ *      `cause: "load"` re-fire the docs warn about (MOD_SEAMS 4l and 4w):
+ *      the dedup is a comparison against what is already stored, never a
  *      this-session memory, because the slot survives the save/load while
  *      the page does not.
- *   2. THE GRAVEYARD ENTRY LANDS BEFORE ANYTHING ELSE THE LOOP DOES, is
- *      appended (never rewrites the entry before it), and records what the
- *      report carried - no field the game did not send.
+ *   2. THE GRAVEYARD ENTRY LANDS BEFORE ANYTHING ELSE THE LOOP DOES, in the
+ *      INSTALL archive keyed by the run key (a re-delivered report
+ *      re-records its run; an unnamed run still appends), carrying what the
+ *      report carried - no field the game did not send - and preserving
+ *      every sibling of the shared install value.
+ *   3. THE ENDED RUN OUTLIVES ITS CHARACTER (#34): the host deletes the
+ *      dead character's save before the report even publishes, so after
+ *      death -> report -> the character's bag is GONE, a fresh read from
+ *      install storage still retrieves the run.
  *
  * AND THE STANDING PROPERTY: the journal never throws and never rejects. A
  * record that cannot be written says so in the log and the run plays on; the
@@ -27,9 +34,12 @@
 import { describe, expect, it } from "vitest";
 import type { Api2Events, Api2LevelEvent, Api2Slot, JsonValue, RunOutcome, RunReport } from "@rpgm-tools/neo-angband-mod-sdk";
 import {
-  appendGraveyardEntry,
+  archiveFinishedRun,
+  GRAVEYARD_KEY,
+  graveyardArchiveOf,
   graveyardEntryOf,
   installWarriorJournal,
+  parseGraveyardArchive,
   parseJournal,
   recordDepthMilestone,
 } from "./journal.js";
@@ -199,15 +209,16 @@ describe("the warrior journal's depth milestones", () => {
   });
 });
 
-describe("the warrior journal's graveyard", () => {
-  it("appends one entry per run report, with the fields the report carried", async () => {
-    const theSlot = slot();
-    await recordDepthMilestone({ slot: theSlot, log: () => undefined, stamps: stamps(1, 100) }, arrival(0, "new-game"));
-    await appendGraveyardEntry({ slot: theSlot, log: () => undefined }, report("death"));
+describe("the install graveyard archive", () => {
+  it("archives one entry per run report, with the fields the report carried", async () => {
+    const install = slot();
+    expect(await archiveFinishedRun({ archive: install, log: () => undefined }, report("death"))).toBe(true);
 
-    const stored = parseJournal(theSlot.held());
-    expect(stored?.graveyard).toEqual([
+    const stored = install.held() as Record<string, unknown>;
+    expect(Object.keys(stored)).toEqual([GRAVEYARD_KEY]);
+    expect(graveyardArchiveOf(stored[GRAVEYARD_KEY] as JsonValue).runs).toEqual([
       {
+        run: "cedar",
         outcome: "death",
         cause: "a novice mage",
         name: "Borg",
@@ -221,22 +232,56 @@ describe("the warrior journal's graveyard", () => {
         score: 56,
       },
     ]);
-    /* The milestone survived the graveyard's write: both halves share the
-     * slot through read-modify-write. */
-    expect(stored?.milestones).toHaveLength(1);
   });
 
-  it("keeps the entries before it verbatim: append-only, per run, per character", async () => {
-    const theSlot = slot();
+  it("keys entries by run key: a re-delivered report re-records its run, and an unnamed run appends", async () => {
+    const install = slot();
     const first = report("death");
+    await archiveFinishedRun({ archive: install, log: () => undefined }, first);
     const second = { ...report("death"), cause: "a wild dog", turn: 900, gold: 40 };
-    await appendGraveyardEntry({ slot: theSlot, log: () => undefined }, first);
-    await appendGraveyardEntry({ slot: theSlot, log: () => undefined }, second);
+    await archiveFinishedRun({ archive: install, log: () => undefined }, second);
+    /* One run, re-reported with its true ending: the entry is RE-RECORDED in
+     * place, never duplicated - the run key is the identity. */
+    expect(graveyardArchiveOf((install.held() as Record<string, unknown>)[GRAVEYARD_KEY] as JsonValue).runs).toHaveLength(1);
+    expect(graveyardArchiveOf((install.held() as Record<string, unknown>)[GRAVEYARD_KEY] as JsonValue).runs[0]?.cause).toBe("a wild dog");
 
-    const stored = parseJournal(theSlot.held());
-    expect(stored?.graveyard).toHaveLength(2);
-    expect(stored?.graveyard[0]).toEqual(graveyardEntryOf(first));
-    expect(stored?.graveyard[1]?.cause).toBe("a wild dog");
+    /* A different run key is a different run... */
+    const other = { ...report("death"), key: "birch", cause: "poison" };
+    await archiveFinishedRun({ archive: install, log: () => undefined }, other);
+    /* ...and a report that carries no key at all is still a run that ended:
+     * it appends, because an unknown run is not the same run as any other. */
+    const unnamed = { ...report("winner"), key: null };
+    await archiveFinishedRun({ archive: install, log: () => undefined }, unnamed);
+    const runs = graveyardArchiveOf((install.held() as Record<string, unknown>)[GRAVEYARD_KEY] as JsonValue).runs;
+    expect(runs.map((entry) => [entry.run, entry.outcome, entry.cause])).toEqual([
+      ["cedar", "death", "a wild dog"],
+      ["birch", "death", "poison"],
+      [null, "winner", "a novice mage"],
+    ]);
+  });
+
+  it("preserves the install slot's siblings - the lineage counter, the birth flag, the title row's memory", async () => {
+    /* The install slot is the SAME shared value the lineage counter, the
+     * birth flag and the title row's profileIds live in (#26's discipline,
+     * the substrate #34 moved the graveyard onto); an archive write that
+     * dropped any of them would trade one record for another. */
+    const install = slot({ profileIds: ["p1"], lineage: 7, warriorBirth: false } as JsonValue);
+    await archiveFinishedRun({ archive: install, log: () => undefined }, report("death"));
+    expect(install.held()).toEqual({
+      profileIds: ["p1"],
+      lineage: 7,
+      warriorBirth: false,
+      [GRAVEYARD_KEY]: { journal: 1, runs: [expect.objectContaining({ run: "cedar" })] },
+    });
+  });
+
+  it("replaces a foreign value under the archive key, without adopting it and without touching siblings", async () => {
+    const install = slot({ lineage: 2, [GRAVEYARD_KEY]: { journal: 99, runs: "garbage" } } as JsonValue);
+    await archiveFinishedRun({ archive: install, log: () => undefined }, report("death"));
+    const stored = install.held() as Record<string, unknown>;
+    expect(stored["lineage"]).toBe(2);
+    expect(graveyardArchiveOf(stored[GRAVEYARD_KEY] as JsonValue).runs).toHaveLength(1);
+    expect(parseGraveyardArchive(stored[GRAVEYARD_KEY] as JsonValue)?.runs[0]?.run).toBe("cedar");
   });
 
   it("records what a partial report carried, and nulls what it did not", async () => {
@@ -249,15 +294,17 @@ describe("the warrior journal's graveyard", () => {
     expect(entry.baseStats).toBeNull();
     expect(entry.score).toBeNull();
 
-    const theSlot = slot();
-    expect(await appendGraveyardEntry({ slot: theSlot, log: () => undefined }, partial)).toBe(true);
-    expect(parseJournal(theSlot.held())?.graveyard).toEqual([entry]);
+    const install = slot();
+    expect(await archiveFinishedRun({ archive: install, log: () => undefined }, partial)).toBe(true);
+    expect(graveyardArchiveOf((install.held() as Record<string, unknown>)[GRAVEYARD_KEY] as JsonValue).runs).toEqual([
+      { run: null, ...entry },
+    ]);
   });
 
-  it("resolves - and says so - when the character slot refuses or throws", async () => {
+  it("resolves - and says so - when the install slot refuses or throws", async () => {
     const logs: string[] = [];
-    await expect(appendGraveyardEntry({ slot: refusingSlot(), log: (m) => logs.push(m) }, report("death"))).resolves.toBe(false);
-    await expect(appendGraveyardEntry({ slot: throwingSlot(), log: (m) => logs.push(m) }, report("death"))).resolves.toBe(false);
+    await expect(archiveFinishedRun({ archive: refusingSlot(), log: (m) => logs.push(m) }, report("death"))).resolves.toBe(false);
+    await expect(archiveFinishedRun({ archive: throwingSlot(), log: (m) => logs.push(m) }, report("death"))).resolves.toBe(false);
     expect(logs.join(" ")).not.toBe("");
   });
 });
@@ -265,8 +312,9 @@ describe("the warrior journal's graveyard", () => {
 describe("the installed warrior journal", () => {
   it("hears the arrivals, records them through the subscription, and stops listening on stop", async () => {
     const theSlot = slot();
+    const install = slot();
     const bus = eventBus();
-    const journal = installWarriorJournal({ slot: theSlot, log: () => undefined, events: bus.api, stamps: stamps(1, 7) });
+    const journal = installWarriorJournal({ slot: theSlot, archive: install, log: () => undefined, events: bus.api, stamps: stamps(1, 7) });
     await settle();
     expect(journal.listening).toBe(true);
     expect(bus.heard()).toBe(true);
@@ -289,15 +337,24 @@ describe("the installed warrior journal", () => {
     expect(parseJournal(theSlot.held())?.milestones.map((m) => m.depth)).toEqual([0, 1]);
   });
 
-  it("writes the graveyard entry its graveyard() was asked for, after stop included nothing new", async () => {
+  it("writes the archive entry its graveyard() was asked for, and the character slot holds only milestones", async () => {
     const theSlot = slot();
+    const install = slot();
     const bus = eventBus();
-    const journal = installWarriorJournal({ slot: theSlot, log: () => undefined, events: bus.api, stamps: stamps(1, 7) });
+    const journal = installWarriorJournal({ slot: theSlot, archive: install, log: () => undefined, events: bus.api, stamps: stamps(1, 7) });
     await settle();
+    bus.arrive(arrival(1, "change"));
     await journal.graveyard(report("death"));
     await journal.stop();
 
-    expect(parseJournal(theSlot.held())?.graveyard).toEqual([graveyardEntryOf(report("death"))]);
+    /* The DEAD character's own slot holds the living character's milestones
+     * - and nothing the next page would need, because the host deletes this
+     * storage at the death (#34). */
+    expect(parseJournal(theSlot.held())?.milestones.map((m) => m.depth)).toEqual([1]);
+    /* The ended run is in the INSTALL archive. */
+    expect(graveyardArchiveOf((install.held() as Record<string, unknown>)[GRAVEYARD_KEY] as JsonValue).runs).toEqual([
+      { run: "cedar", ...graveyardEntryOf(report("death")) },
+    ]);
   });
 
   it("keeps its graveyard working when the arrival subscription was refused", async () => {
@@ -305,22 +362,22 @@ describe("the installed warrior journal", () => {
      * report still arrives on the restart loop's own grant, and the record
      * of the run that ended must not depend on the one that did not. */
     const theSlot = slot();
+    const install = slot();
     const bus = eventBus({ refuse: true });
-    const journal = installWarriorJournal({ slot: theSlot, log: () => undefined, events: bus.api, stamps: stamps(1, 7) });
+    const journal = installWarriorJournal({ slot: theSlot, archive: install, log: () => undefined, events: bus.api, stamps: stamps(1, 7) });
     await settle();
     expect(journal.listening).toBe(false);
 
     await journal.graveyard(report("death"));
-    const stored = parseJournal(theSlot.held());
-    expect(stored?.milestones).toEqual([]);
-    expect(stored?.graveyard).toHaveLength(1);
+    expect(parseJournal(theSlot.held())).toBeNull();
+    expect(graveyardArchiveOf((install.held() as Record<string, unknown>)[GRAVEYARD_KEY] as JsonValue).runs).toHaveLength(1);
     await journal.stop();
   });
 
   it("warns once, not per arrival, when the character's slot will not take a milestone", async () => {
     const logs: string[] = [];
     const bus = eventBus();
-    const journal = installWarriorJournal({ slot: refusingSlot(), log: (message) => logs.push(message), events: bus.api, stamps: stamps(1, 1) });
+    const journal = installWarriorJournal({ slot: refusingSlot(), archive: slot(), log: (message) => logs.push(message), events: bus.api, stamps: stamps(1, 1) });
     await settle();
     /* Two arrivals, one line: a wall of identical complaints helps nobody. */
     bus.arrive(arrival(1, "change"));
@@ -331,11 +388,13 @@ describe("the installed warrior journal", () => {
   });
 
   it("never lets a milestone write in flight lose a graveyard entry that follows", async () => {
-    /* Both halves share one slot through read-modify-write; the chain is
-     * what keeps an interleaving from dropping one of them. */
+    /* The two halves write two substrates now (#34), but the chain still
+     * orders what the journal accepted: a milestone in flight when the
+     * report arrives lands, and the archive write lands after it. */
     const theSlot = slot();
+    const install = slot();
     const bus = eventBus();
-    const journal = installWarriorJournal({ slot: theSlot, log: () => undefined, events: bus.api, stamps: stamps(1, 7) });
+    const journal = installWarriorJournal({ slot: theSlot, archive: install, log: () => undefined, events: bus.api, stamps: stamps(1, 7) });
     await settle();
     bus.arrive(arrival(0, "new-game"));
     bus.arrive(arrival(3, "change"));
@@ -344,8 +403,39 @@ describe("the installed warrior journal", () => {
     await written;
     await journal.stop();
 
-    const stored = parseJournal(theSlot.held());
-    expect(stored?.milestones.map((m) => m.depth)).toEqual([0, 3, 1]);
-    expect(stored?.graveyard).toHaveLength(1);
+    expect(parseJournal(theSlot.held())?.milestones.map((m) => m.depth)).toEqual([0, 3, 1]);
+    expect(graveyardArchiveOf((install.held() as Record<string, unknown>)[GRAVEYARD_KEY] as JsonValue).runs).toHaveLength(1);
+  });
+
+  it("still retrieves the ended run after the dead character's own storage is gone (#34's regression)", async () => {
+    /* THE HOST'S DEATH ORDER, as the review verified it in the game's own
+     * source: markDead removes the character's save (and detaches the slot)
+     * BEFORE the run report publishes, and the reload that follows create
+     * builds the next character a fresh bag. So the regression is exactly
+     * death -> report -> the character's slot GONE -> a fresh read from
+     * install storage still retrieves the ended run. */
+    const theSlot = slot();
+    const install = slot({ profileIds: ["p1"] } as JsonValue);
+    const bus = eventBus();
+    const journal = installWarriorJournal({ slot: theSlot, archive: install, log: () => undefined, events: bus.api, stamps: stamps(1, 7) });
+    await settle();
+    bus.arrive(arrival(2, "change"));
+    await journal.graveyard(report("death"));
+    await journal.stop();
+
+    /* The character dies: the host deletes its save and the reload builds
+     * the next character a bag that never saw this one. */
+    const gone = parseJournal(null);
+    expect(gone).toBeNull();
+    const nextCharacterSlot = slot();
+
+    /* The FRESH read is from the install slot alone - nothing of the dead
+     * character's storage participates - and it still retrieves the run. */
+    const retrieved = graveyardArchiveOf((install.held() as Record<string, unknown>)[GRAVEYARD_KEY] as JsonValue);
+    expect(retrieved.runs).toEqual([{ run: "cedar", ...graveyardEntryOf(report("death")) }]);
+    /* And the sibling the title row left in the shared install value
+     * survived the archive write. */
+    expect((install.held() as Record<string, unknown>)["profileIds"]).toEqual(["p1"]);
+    expect(parseJournal(nextCharacterSlot.held())).toBeNull();
   });
 });

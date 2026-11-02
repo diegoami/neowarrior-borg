@@ -46,9 +46,13 @@
  *     loop was already running. Each report captures the counter at entry
  *     and re-checks it after every await, before its next side effect: no
  *     flag write, no create, no claim in the log. The ONE deliberate
- *     exception is cleanup: a flag a cancelled report had already written
- *     is still durably cleared, because a standing flag beside a live page
- *     is the stranded-flag hazard whatever retired the loop - and a create
+ *     exception is cleanup: a flag a cancelled report HAD WRITTEN - or had
+ *     asked to write without its read-back ever completing (#35: a failed
+ *     verification cannot prove the write did not land, and a slot's
+ *     refusal is not proof of absence either) - is still durably cleared,
+ *     with a loud honest warning kept when even the clear will not verify,
+ *     because a standing flag beside a live page is the stranded-flag
+ *     hazard whatever retired the loop - and a create
  *     that was already issued still has its OUTCOME handled (ok means the
  *     page is going away; a failure still clears the flag), because
  *     undoing a birth is not an option and abandoning the flag is worse.
@@ -221,18 +225,23 @@ export function installWarriorRestart(deps: WarriorRestartDeps): WarriorRestart 
     const dropped = (where: string): void => {
       deps.log(`the Borg's restart loop was retired while a run report was still in flight (${where}), so the report is dropped`);
     };
-    /** Retire a flag a cancelled report had already written, and say which
-     * way it landed. Cleanup, deliberately not epoch-gated: a standing flag
+    /** Retire a flag a cancelled report may have written, and say which way
+     * it landed. Cleanup, deliberately not epoch-gated: a standing flag
      * beside a live page is the stranded-flag hazard whatever retired the
-     * loop. */
+     * loop. Called whenever the report reached the flag step at all (#35) -
+     * the clear's own read-back is the only proof of whether the write ever
+     * landed, and it says so truthfully in either direction. */
     const retireWrittenFlag = async (): Promise<void> => {
       const cleared = await clearWarriorBirthFlag(deps.slot);
       if (cleared) {
-        deps.log("the Borg's restart loop was retired after a report had written the birth flag; the flag was cleared and no next warrior is started");
+        deps.log(
+          "the Borg's restart loop was retired while a report's birth flag was written or still unproven; " +
+            "the flag was cleared and no next warrior is started",
+        );
         return;
       }
       deps.log(
-        "the Borg's restart loop was retired after a report had written the birth flag, AND the flag could not be durably cleared: " +
+        "the Borg's restart loop was retired after a report had written - or may have written - the birth flag, AND the flag could not be durably cleared: " +
           "the flag may still be set, and the next character created after any later reload would be born as the Borg's " +
           "planned warrior. The presenter still consumes-or-declines it on that page, but a human's birth could be taken " +
           "once - clear the mod's install storage before letting anyone create a character here",
@@ -314,12 +323,15 @@ export function installWarriorRestart(deps: WarriorRestartDeps): WarriorRestart 
     const written = await setWarriorBirthFlag(deps.slot);
     const standing = written && (await flagIsDurable(deps.slot));
     if (retired()) {
-      /* The stop may have landed anywhere inside the flag work - including
-       * between the write and this line, which is why the clear runs even
-       * though the loop is gone: a flag written by a retired report strands
-       * exactly like any other. */
-      if (standing) await retireWrittenFlag();
-      else dropped("it had not durably written its birth flag");
+      /* The stop may have landed anywhere inside the flag work - between
+       * the write and this line included - so VERIFIED cleanup runs
+       * whenever the flag step was reached at all (#35): `standing ===
+       * false` means the read-back failed, NOT that the write did not land,
+       * and a slot's refusal is not proof of absence either (#25's lesson,
+       * in mirror). A flag a retired report may have written strands
+       * exactly like any other, and only the clear's own read-back can
+       * prove which way it landed. */
+      await retireWrittenFlag();
       return;
     }
     if (!standing) {

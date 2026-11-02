@@ -17030,6 +17030,7 @@ async function bumpLineage(slot) {
 
 // src/records/journal.ts
 var JOURNAL_FORMAT = 1;
+var GRAVEYARD_KEY = "graveyard";
 var isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 var numberOr = (value, fallback) => typeof value === "number" && Number.isFinite(value) ? value : fallback;
 var numberArrayOr = (value) => Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isFinite(entry)) ? [...value] : null;
@@ -17075,8 +17076,7 @@ function entryOf(value) {
 function parseJournal(value) {
   if (value === null || !isObject(value) || value["journal"] !== JOURNAL_FORMAT) return null;
   const milestones = Array.isArray(value["milestones"]) ? value["milestones"].map(milestoneOf).filter((entry) => entry !== null) : [];
-  const graveyard = Array.isArray(value["graveyard"]) ? value["graveyard"].map(entryOf).filter((entry) => entry !== null) : [];
-  return { journal: JOURNAL_FORMAT, milestones, graveyard };
+  return { journal: JOURNAL_FORMAT, milestones };
 }
 function storeJournal(data) {
   return {
@@ -17088,21 +17088,28 @@ function storeJournal(data) {
       arena: milestone.arena,
       level: milestone.level,
       turn: milestone.turn
-    })),
-    graveyard: data.graveyard.map((entry) => ({
-      outcome: entry.outcome,
-      cause: entry.cause,
-      ...entry.name === null ? {} : { name: entry.name },
-      ...entry.race === null ? {} : { race: entry.race },
-      ...entry.class === null ? {} : { class: entry.class },
-      ...entry.baseStats === null ? {} : { baseStats: [...entry.baseStats] },
-      ...entry.maxDepth === null ? {} : { maxDepth: entry.maxDepth },
-      ...entry.level === null ? {} : { level: entry.level },
-      ...entry.gold === null ? {} : { gold: entry.gold },
-      ...entry.turn === null ? {} : { turn: entry.turn },
-      ...entry.score === null ? {} : { score: entry.score }
     }))
   };
+}
+function archivedRunOf(value) {
+  if (!isObject(value)) return null;
+  const entry = entryOf(value);
+  if (entry === null) return null;
+  const run = value["run"];
+  return { ...entry, run: typeof run === "string" ? run : null };
+}
+function parseGraveyardArchive(value) {
+  if (value === null || !isObject(value) || value["journal"] !== JOURNAL_FORMAT) return null;
+  const runs = Array.isArray(value["runs"]) ? value["runs"].map(archivedRunOf).filter((run) => run !== null) : [];
+  return { journal: JOURNAL_FORMAT, runs };
+}
+function graveyardArchiveOf(value) {
+  return parseGraveyardArchive(value) ?? { journal: JOURNAL_FORMAT, runs: [] };
+}
+function storeArchiveRun(run) {
+  const stored = storeGraveyardEntry(run);
+  if (run.run !== null) stored["run"] = run.run;
+  return stored;
 }
 async function readJournal(slot) {
   let read;
@@ -17112,7 +17119,7 @@ async function readJournal(slot) {
     return null;
   }
   if (!read.ok) return null;
-  return parseJournal(read.value) ?? { journal: JOURNAL_FORMAT, milestones: [], graveyard: [] };
+  return parseJournal(read.value) ?? { journal: JOURNAL_FORMAT, milestones: [] };
 }
 async function recordDepthMilestone(deps, event) {
   const current = await readJournal(deps.slot);
@@ -17164,21 +17171,48 @@ function graveyardEntryOf(report) {
     score: typeof report.score === "number" ? report.score : null
   };
 }
-async function appendGraveyardEntry(deps, report) {
-  const current = await readJournal(deps.slot);
-  if (current === null) {
-    deps.log("the Borg could not read this character's save, so the run that just ended is not recorded in it");
+function storeGraveyardEntry(entry) {
+  return {
+    outcome: entry.outcome,
+    cause: entry.cause,
+    ...entry.name === null ? {} : { name: entry.name },
+    ...entry.race === null ? {} : { race: entry.race },
+    ...entry.class === null ? {} : { class: entry.class },
+    ...entry.baseStats === null ? {} : { baseStats: [...entry.baseStats] },
+    ...entry.maxDepth === null ? {} : { maxDepth: entry.maxDepth },
+    ...entry.level === null ? {} : { level: entry.level },
+    ...entry.gold === null ? {} : { gold: entry.gold },
+    ...entry.turn === null ? {} : { turn: entry.turn },
+    ...entry.score === null ? {} : { score: entry.score }
+  };
+}
+async function archiveFinishedRun(deps, report) {
+  let read;
+  try {
+    read = await deps.archive.get();
+  } catch {
+    deps.log("the Borg could not read its install storage, so the run that just ended is not archived in it");
     return false;
   }
-  const merged = { ...current, graveyard: [...current.graveyard, graveyardEntryOf(report)] };
+  if (!read.ok) {
+    deps.log("the Borg could not read its install storage, so the run that just ended is not archived in it");
+    return false;
+  }
+  const base = read.value !== null && typeof read.value === "object" && !Array.isArray(read.value) ? read.value : {};
+  const current = graveyardArchiveOf(base[GRAVEYARD_KEY] ?? null);
+  const entry = { run: typeof report.key === "string" ? report.key : null, ...graveyardEntryOf(report) };
+  const runs = [...current.runs];
+  const at = entry.run === null ? -1 : runs.findIndex((stored) => stored.run === entry.run);
+  if (at >= 0) runs[at] = entry;
+  else runs.push(entry);
   try {
-    const written = await deps.slot.set(storeJournal(merged));
+    const written = await deps.archive.set({ ...base, [GRAVEYARD_KEY]: { journal: JOURNAL_FORMAT, runs: runs.map(storeArchiveRun) } });
     if (!written.ok) {
-      deps.log(`the Borg could not record the run that just ended in this character's save (${written.message})`);
+      deps.log(`the Borg could not archive the run that just ended in its install storage (${written.message})`);
       return false;
     }
   } catch (error) {
-    deps.log(`the Borg could not record the run that just ended in this character's save (${error instanceof Error ? error.message : String(error)})`);
+    deps.log(`the Borg could not archive the run that just ended in its install storage (${error instanceof Error ? error.message : String(error)})`);
     return false;
   }
   return true;
@@ -17221,7 +17255,7 @@ function installWarriorJournal(deps) {
       return subscription !== null;
     },
     graveyard(report) {
-      return enqueue(() => appendGraveyardEntry({ slot: deps.slot, log: deps.log }, report).then(() => void 0));
+      return enqueue(() => archiveFinishedRun({ archive: deps.archive, log: deps.log }, report).then(() => void 0));
     },
     async stop() {
       await subscribed;
@@ -17272,11 +17306,13 @@ function installWarriorRestart(deps) {
     const retireWrittenFlag = async () => {
       const cleared = await clearWarriorBirthFlag(deps.slot);
       if (cleared) {
-        deps.log("the Borg's restart loop was retired after a report had written the birth flag; the flag was cleared and no next warrior is started");
+        deps.log(
+          "the Borg's restart loop was retired while a report's birth flag was written or still unproven; the flag was cleared and no next warrior is started"
+        );
         return;
       }
       deps.log(
-        "the Borg's restart loop was retired after a report had written the birth flag, AND the flag could not be durably cleared: the flag may still be set, and the next character created after any later reload would be born as the Borg's planned warrior. The presenter still consumes-or-declines it on that page, but a human's birth could be taken once - clear the mod's install storage before letting anyone create a character here"
+        "the Borg's restart loop was retired after a report had written - or may have written - the birth flag, AND the flag could not be durably cleared: the flag may still be set, and the next character created after any later reload would be born as the Borg's planned warrior. The presenter still consumes-or-declines it on that page, but a human's birth could be taken once - clear the mod's install storage before letting anyone create a character here"
       );
     };
     if (spent) {
@@ -17330,8 +17366,7 @@ function installWarriorRestart(deps) {
     const written = await setWarriorBirthFlag(deps.slot);
     const standing = written && await flagIsDurable(deps.slot);
     if (retired()) {
-      if (standing) await retireWrittenFlag();
-      else dropped("it had not durably written its birth flag");
+      await retireWrittenFlag();
       return;
     }
     if (!standing) {
@@ -17506,6 +17541,7 @@ async function begin(mod2) {
   };
   const journal = installWarriorJournal({
     slot: mod2.store.character,
+    archive: mod2.store.install,
     log: (message) => mod2.meta.log(message),
     events: mod2.events,
     stamps: async () => {

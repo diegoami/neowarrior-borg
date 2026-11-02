@@ -14,8 +14,10 @@
  * stands in for saves.create + the presenter + the reload, and here the
  * stand-in extends to the RECORDS - `state.events` gets the bus a host
  * attaches (the engine emits `dungeonlevel` into it on every arrival, the
- * session's first level through `announceArrival`), and each character gets
- * the in-memory slot that stands in for `mod.store.character` in its save.
+ * session's first level through `announceArrival`), each character gets the
+ * in-memory slot that stands in for `mod.store.character` in its save, and,
+ * since #34, ONE session-wide slot stands in for `mod.store.install` - the
+ * storage that outlives every character, where the graveyard archive lives.
  * The journal code between those seams is the mod's own: installWarriorJournal,
  * unmodified, subscribed to the engine's real arrival events, and its
  * graveyard writer awaited BEFORE the next warrior boots - the same
@@ -61,7 +63,7 @@ import { bindCore, coreIsBound } from "../core-api.js";
 import { makeCoreResolvers } from "../resolvers.js";
 import { ladderFromCostTable, planWarriorBirth, WARRIOR_CLASS_NAME, type WarriorBuildPlan } from "../birth/plan.js";
 import { WARRIOR_RACE_CANDIDATES } from "../birth/settings.js";
-import { installWarriorJournal, parseJournal, type WarriorJournalData } from "./journal.js";
+import { installWarriorJournal, parseJournal, GRAVEYARD_KEY, graveyardArchiveOf, type ArchivedRun, type WarriorJournalData } from "./journal.js";
 
 /* ==================================================================
  * The content pack (moved from play.test.ts, which imports it from here)
@@ -181,6 +183,18 @@ function characterSlot(): Api2Slot & { held(): JsonValue | null } {
 }
 
 /**
+ * The session's install slot, the stand-in for `mod.store.install`: ONE for
+ * the whole session, outliving every character's bag the way the host's
+ * install storage outlives every character (#34). The graveyard archive
+ * lives here, so the record of a run that ended survives that character's
+ * own save - which the next iteration's fresh `characterSlot` stands in for
+ * the host deleting.
+ */
+function installSlot(): Api2Slot & { held(): JsonValue | null } {
+  return characterSlot();
+}
+
+/**
  * The events domain the journal subscribes through, over the engine's own
  * bus: the payload the engine emits for `dungeonlevel` IS the API's
  * Api2LevelEvent shape, so the journal hears the real arrivals, never a
@@ -234,6 +248,9 @@ function runReportOf(state: GameState, outcome: RunReport["outcome"]): RunReport
   return {
     outcome,
     cause: player.diedFrom,
+    /* A bare engine has no host naming the save's key, so the report says
+     * null rather than inventing one - the archive's unknown-run rule
+     * (append, never dedupe) is built for exactly this shape. */
     key: null,
     name,
     race: player.race.name,
@@ -266,7 +283,7 @@ function killsOf(state: GameState): number {
  * The session
  * ================================================================== */
 
-/** One warrior's life, with its records read back from the journal's slot. */
+/** One warrior's life, with its records read back from the journal's slots. */
 export interface SessionLife {
   readonly seed: number;
   /** Whether the warrior died (the event that boots the next one). */
@@ -303,11 +320,25 @@ export interface SessionLife {
   readonly arrivalStamps: ReadonlyMap<number, { readonly level: number; readonly turn: number }>;
   /** The journal as it stood in the character's slot at the end of the life. */
   readonly journal: WarriorJournalData | null;
+  /**
+   * The graveyard entries this life's report added to the INSTALL archive
+   * (#34): empty for a survivor, one entry for a warrior that died. Read
+   * from the install slot - the storage that survives the character - never
+   * from the character's own bag, which the host deletes at the death.
+   */
+  readonly graveyard: readonly ArchivedRun[];
 }
 
 /** A whole session: the lives in play order, chained by deaths. */
 export interface SessionOutcome {
   readonly lives: readonly SessionLife[];
+  /**
+   * The install archive as it stands after the session: every ended run,
+   * still readable now that every character's own bag is gone - the property
+   * #34 exists to give the record (#34's required read is exactly this one,
+   * after the last character's storage no longer exists).
+   */
+  readonly graveyard: readonly ArchivedRun[];
 }
 
 /** How a session is asked for. */
@@ -339,6 +370,16 @@ export async function playWarriorSession(pack: GamePack, options: WarriorSession
   const plan = warriorSessionPlan(pack, options.raceName);
   const say = options.log ?? ((): void => undefined);
   const lives: SessionLife[] = [];
+  /* The session's ONE install slot (#34): every life's journal archives its
+   * ended run here, exactly as the mod archives into mod.store.install - the
+   * storage whose lifetime survives each character. The per-life character
+   * slots below are created fresh per iteration, which is the harness's
+   * stand-in for the host deleting the dead character's save. */
+  const install = installSlot();
+  const archivedSoFar = (): readonly ArchivedRun[] =>
+    graveyardArchiveOf((install.held() !== null && typeof install.held() === "object" && !Array.isArray(install.held())
+      ? (install.held() as Record<string, JsonValue>)[GRAVEYARD_KEY] ?? null
+      : null)).runs;
 
   for (const seed of options.seeds) {
     const previous = lives[lives.length - 1];
@@ -374,10 +415,12 @@ export async function playWarriorSession(pack: GamePack, options: WarriorSession
     });
 
     /* The journal, on the same seams the plugin wires: this character's slot,
-     * the events domain, and stamps read from the live game at the arrival. */
+     * the events domain, and stamps read from the live game at the arrival -
+     * and, since #34, the session's install slot as the graveyard archive. */
     const slot = characterSlot();
     const journal = installWarriorJournal({
       slot,
+      archive: install,
       log: say,
       events: eventsOverBus(bus),
       stamps: async () => ({ level: state.actor.player.lev, turn: state.turn }),
@@ -426,9 +469,15 @@ export async function playWarriorSession(pack: GamePack, options: WarriorSession
     const depths = new Set<number>([state.chunk.depth]);
     let dead = false;
     let taken = 0;
-    for (; taken < options.capFor(seed); taken++) {
+    for (; taken < options.capFor(seed); ) {
       armed = true;
       const status = runGameLoop(state, game.registry);
+      /* The decision is counted WHEN IT COMPLETES, whatever its outcome
+       * (#36): the old shape ran the loop's `taken++` in the for-header, so
+       * a death broke out before it and the killing decision was issued
+       * (the census below saw it) but not counted - every death entry in
+       * the committed records undercounted by exactly one. */
+      taken += 1;
       depths.add(state.chunk.depth);
       if (status === LOOP_STATUS.DEAD) {
         dead = true;
@@ -445,9 +494,25 @@ export async function playWarriorSession(pack: GamePack, options: WarriorSession
       }
     }
 
+    /* The census, counted independently of `taken` (it counts commands as
+     * the controller issues them, not loop iterations), must agree with it:
+     * a disagreement means the record is about to lie, and the honest
+     * failure is to fail the session rather than commit it (#36's required
+     * assertion, in the driver so every caller - test, runs tool, sweep -
+     * inherits it). */
+    const issued = Object.values(commands).reduce((total, count) => total + count, 0);
+    if (issued !== taken) {
+      throw new Error(
+        `seed ${String(seed)}: the census counts ${String(issued)} commands over ${String(taken)} decisions - the record would disagree with the game`,
+      );
+    }
+
     /* The graveyard entry for this life, BEFORE anything that would stand in
      * for the loop's create (here: the next iteration's startGame) - the
-     * record cannot be lost to a teardown that follows. */
+     * record cannot be lost to a teardown that follows. It lands in the
+     * INSTALL archive (#34), so the next life - and any later page - can
+     * still read it after this character's bag is gone. */
+    const archivedBefore = archivedSoFar();
     if (dead) await journal.graveyard(runReportOf(state, "death"));
     /* The load re-fire the docs warn about (MOD_SEAMS 4l and 4w): every depth the
      * character visited, re-announced as a session's first level the way a
@@ -457,6 +522,12 @@ export async function playWarriorSession(pack: GamePack, options: WarriorSession
       bus.emit("dungeonlevel", { depth, levelId: state.levelSerial ?? 0, cause: "load", arena: false } satisfies DungeonLevelEventData);
     }
     await journal.stop();
+
+    /* This life's archived entries: what the install archive gained while
+     * this character lived (its one report, if it died). Read from the
+     * archive AFTER the awaited write, so the assertion is over the record a
+     * later page would read - not over what the writer promised. */
+    const archived = archivedSoFar();
 
     lives.push({
       seed,
@@ -476,8 +547,9 @@ export async function playWarriorSession(pack: GamePack, options: WarriorSession
       depthsVisited: [...depths].sort((a, b) => a - b),
       arrivalStamps,
       journal: parseJournal(slot.held()),
+      graveyard: archived.slice(archivedBefore.length),
     });
   }
 
-  return { lives };
+  return { lives, graveyard: archivedSoFar() };
 }

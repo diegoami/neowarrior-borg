@@ -32,6 +32,29 @@ decision this record exists to feed - the default `borg.raceChoice` - is on
   invocation, not a suite test, because 64 play-length lives are north of an
   hour and a suite that long stops being run.
 
+## ERRATUM (added 2026-11-02, review #36): death entries undercount `decisions` by one
+
+The driver this record was produced with counted a decision only when the
+play loop's header ran its increment - so the decision that KILLED a warrior
+was issued (it is in the command census) but never added to `decisions`.
+Every **death entry in this record's `runs.json` (21 of 64) therefore reads
+one decision lower than the number of decisions actually taken**: for each
+of them `sum(commands) == decisions + 1` (Half-Troll seed 20 pin, for
+example: 363 recorded, 364 issued). Every surviving entry has
+`sum(commands) == decisions` and is exact.
+
+The driver is fixed (the completed decision is counted before the death
+break, and it now asserts the census equals the count independently, so a
+future disagreement fails the session rather than committing a lying
+record), but **the committed JSON is immutable (rule 7) and stays exactly as
+recorded**. No other field is affected - `turns`, `maxDepth`, `clvl`,
+`kills`, `gold`, `causeOfDeath`, `deathDepth` and the command census itself
+were read from the live game and are exact - so every table above and the
+owner's race interpretation stand unchanged. The same defect undercounts the
+four death entries of the T06 record
+([2026-11-02-t06-first-warrior-session](../2026-11-02-t06-first-warrior-session/README.md));
+its erratum says the same thing.
+
 ## The seeds, fixed and recorded
 
 `1, 7, 20, 23, 34, 42, 49, 99` - the four T06-pinned seeds (20, 23, 34, 49)
@@ -145,7 +168,7 @@ reaches other checkouts, and another checkout's `pnpm install` can rewrite
 the shared object mid-sweep. **Future sweeps: break the hardlink before
 patching (or run the variant in an isolated store), and fingerprint at every
 phase boundary — start AND end of each variant.** This sweep predates that
-rule; its phases are proven below.
+rule; its phases are reconstructed from the retained fingerprints below, and what they can prove is bounded by the corrected note that follows the timeline.
 
 ### The fingerprint timeline (times are this checkout's file mtimes)
 
@@ -156,29 +179,70 @@ rule; its phases are proven below.
 | 20:29:08 | backup saved, patch applied → `209174f6…90b` | `artifacts/trap.js.pristine` mtime; patch command printed both md5s and the 2-edit diff |
 | ~20:29:15 | patched sweep starts on `209174f6…90b` | the sweep command's first line printed the md5; matches ~6:45 of per-cell wall time to its 20:36:14 finish |
 | 20:29:35 | patched 1500-probe done (differs from pin probe: depth 1/clvl 3 vs 2/4) | `artifacts/probe-seed1-1500-patched/runs.json` mtime |
-| 20:29:55 | better-borg restores ITS copy pristine (external; no write to this checkout's inode — see proof) | main-session report |
+| 20:29:55 | better-borg restores ITS copy pristine (external; whether it wrote through the shared inode is not determinable from the sweep's outputs - see the corrected note below) | main-session report |
 | 20:36:14 | patched sweep's 32 cells done | `docs/runs/2026-11-02-bakeoff/runs.json` mtime |
 | 20:36:58 | revert: `cp` saved original, `cmp` byte-identical, md5 `c89b1b08…f4` | the real file's mtime; `cmp`/`diff` output in the log |
 | 20:39–20:40 | determinism re-runs reproduce pin cells bit-for-bit | `artifacts/determinism-rerun/runs.json` |
 | 20:42–20:48 | full `pnpm verify` reproduces the pristine #12 signature (seed-1 `close` 771/1500, the import baseline's exact count) | verify log |
 | post-warning re-check | `c89b1b08…f4` pristine; inode `nlink 4` (the sharing, measured) | fresh md5 + stat |
 
-### Why the patched variant is intact despite the 20:29:55 scare
+### What the 20:29:55 scare actually proves (corrected 2026-11-02, review #37)
 
-If better-borg's reinstall had rewritten the shared inode at 20:29:55 (~40s
-into the patched sweep), every patched cell finishing after that moment
-would have run PRISTINE and — the engine is deterministic — would be
-bit-for-bit identical to its pin twin. Of the 27 patched cells that finished
-after 20:29:55, **26 differ from their pin twins** (only Dwarf seed 1
-matches: a 116-decision death too short for the paths to diverge, flanked by
-Dwarf cells that all differ). A mid-sweep reversion is therefore impossible;
+The proof this section originally carried was unsound, and the correction is
+recorded here rather than quietly rewritten. The original claim: a mid-sweep
+rewrite of the shared inode to pristine would have made every later-finishing
+patched cell run pristine and match its pin twin, so the differing cells
+proved no rewrite happened ("a mid-sweep reversion is therefore impossible;
 the reinstall relinked better-borg's copy instead of truncating the shared
-object. The pin variant needs no such argument: all 32 of its cells finished
-before the patch existed, and its numbers are triple-cross-checked (T06's
-committed cells reproduced; post-revert re-runs bit-identical; the verify's
-pristine-only #12 reproduction). This checkout's revert at 20:36:58 wrote
-pristine bytes through the same shared inode — content-identical to what
-every other sharer already had, so no other checkout's state changed.
+object"). That inference ignores how the sweep process loads the engine, and
+is withdrawn.
+
+**The module lifetime.** `tools/bakeoff.mjs` imports the session bundle -
+which imports `@rpgm-tools/neo-angband-core` statically - exactly once,
+before the cell loop. Node's ESM cache keeps those evaluated modules for the
+whole life of the process: rewriting `dist/game/trap.js` on disk replaces
+neither the loaded functions the next cell calls nor the functions a cell
+already running holds. The reviewer proved this on an isolated `/tmp` copy
+of the real engine: import the module, restore its disk bytes to pristine,
+import the identical URL again - the same module object comes back, and its
+cached exports still carry the patch while the file on disk is byte-pristine
+(the live dependency's md5 stayed `c89b1b08…f4` throughout).
+
+**So the differing cells prove the right - weaker - thing.** Of the 27
+patched cells that finished after 20:29:55, **26 differ from their pin
+twins** (only Dwarf seed 1 matches: a 116-decision death too short for the
+paths to diverge, flanked by Dwarf cells that all differ). What that
+establishes is that the LOADED engine in the sweep's one process was the
+patched one - before and after 20:29:55 alike - because a single process
+cannot trade its loaded modules for disk bytes. What it does NOT establish
+is anything about the shared inode itself: whether better-borg's reinstall
+truncated the shared object or relinked its own copy is invisible to cell
+outputs, since either way the running process kept the patched modules it
+had already loaded.
+
+**What the retained evidence does establish.** The fingerprint timeline
+bounds the DISK at its recorded moments: pristine before the sweep,
+`209174f6…90b` at the 20:29:08 patch and the patched sweep's start, and
+pristine again at the 20:36:58 revert (`cmp` byte-identical to the saved
+original). The 1500-probe pair bounds the LOADED module early in the sweep:
+the patched probe (20:29:35) diverges from the pin probe (depth 1/clvl 3 vs
+2/4), so the process was running patched functions by then. Between
+fingerprints a disk rewrite is undetectable after the fact - but it could
+not have changed what any cell ran, and the 20:36:58 revert wrote pristine
+bytes through the shared inode whatever the interim state was, so every
+sharer's copy ended pristine. The sweep's numbers stand; only the stronger
+inode claim is not available. The pin variant needs none of this: all 32 of
+its cells finished before the patch existed, and its numbers are
+triple-cross-checked (T06's committed cells reproduced; post-revert re-runs
+bit-identical; the verify's pristine-only #12 reproduction).
+
+**For future sweeps**, the declared protocol stands and gains one clause:
+break the hardlink before patching (or run the variant in an isolated
+store), and fingerprint at every phase boundary - start AND end of each
+variant - with the fingerprints understood as bounds on the DISK, while
+what a cell RAN is bounded by the module the process loaded at its start.
+An isolated store closes both at once: there, loaded and on-disk cannot
+diverge.
 
 ## What it means for the next task
 

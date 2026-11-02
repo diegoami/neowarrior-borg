@@ -31,9 +31,10 @@ came from, the way the port marks its own deviations.
   `resumeAutoplayer`), so an unattended session is a chain of planned
   warriors - the same optimized point-buy, a race drawn from the shortlist
   each time - not one random character after another.
-- **Runs are recorded.** In-mod, each character keeps a journal (depth
-  milestones from `dungeonlevel` events, a graveyard entry written at each
-  death). Outside the mod, the headless harness writes per-run records - depth,
+- **Runs are recorded.** In-mod, each character keeps a journal of its depth
+  milestones (`dungeonlevel` events), and every ended run is archived in
+  install storage that outlives the character the game deletes at its
+  death. Outside the mod, the headless harness writes per-run records - depth,
   level, kills, gold, turns, cause of death - as JSON and as the tables in
   [docs/runs](docs/runs/).
 

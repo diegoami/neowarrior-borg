@@ -16984,6 +16984,211 @@ function resolveWarriorRace(stored, packRaces, log) {
   return { raceName: fallback, index, fellBack: true };
 }
 
+// src/records/journal.ts
+var JOURNAL_FORMAT = 1;
+var isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var numberOr = (value, fallback) => typeof value === "number" && Number.isFinite(value) ? value : fallback;
+var numberArrayOr = (value) => Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isFinite(entry)) ? [...value] : null;
+function milestoneOf(value) {
+  if (!isObject(value)) return null;
+  const depth = numberOr(value["depth"], Number.NaN);
+  const levelId = numberOr(value["levelId"], Number.NaN);
+  const cause = value["cause"];
+  if (depth === null || Number.isNaN(depth) || levelId === null || Number.isNaN(levelId)) return null;
+  if (cause !== "new-game" && cause !== "load" && cause !== "change") return null;
+  return {
+    depth,
+    levelId,
+    cause,
+    arena: value["arena"] === true,
+    level: numberOr(value["level"], null),
+    turn: numberOr(value["turn"], null)
+  };
+}
+function entryOf(value) {
+  if (!isObject(value)) return null;
+  const outcome = value["outcome"];
+  if (outcome !== "death" && outcome !== "winner" && outcome !== "retired") return null;
+  const cause = value["cause"];
+  if (typeof cause !== "string") return null;
+  const name = value["name"];
+  const race = value["race"];
+  const cls = value["class"];
+  return {
+    outcome,
+    cause,
+    name: typeof name === "string" ? name : null,
+    race: typeof race === "string" ? race : null,
+    class: typeof cls === "string" ? cls : null,
+    baseStats: numberArrayOr(value["baseStats"]),
+    maxDepth: numberOr(value["maxDepth"], null),
+    level: numberOr(value["level"], null),
+    gold: numberOr(value["gold"], null),
+    turn: numberOr(value["turn"], null),
+    score: numberOr(value["score"], null)
+  };
+}
+function parseJournal(value) {
+  if (value === null || !isObject(value) || value["journal"] !== JOURNAL_FORMAT) return null;
+  const milestones = Array.isArray(value["milestones"]) ? value["milestones"].map(milestoneOf).filter((entry) => entry !== null) : [];
+  const graveyard = Array.isArray(value["graveyard"]) ? value["graveyard"].map(entryOf).filter((entry) => entry !== null) : [];
+  return { journal: JOURNAL_FORMAT, milestones, graveyard };
+}
+function storeJournal(data) {
+  return {
+    journal: JOURNAL_FORMAT,
+    milestones: data.milestones.map((milestone) => ({
+      depth: milestone.depth,
+      levelId: milestone.levelId,
+      cause: milestone.cause,
+      arena: milestone.arena,
+      level: milestone.level,
+      turn: milestone.turn
+    })),
+    graveyard: data.graveyard.map((entry) => ({
+      outcome: entry.outcome,
+      cause: entry.cause,
+      ...entry.name === null ? {} : { name: entry.name },
+      ...entry.race === null ? {} : { race: entry.race },
+      ...entry.class === null ? {} : { class: entry.class },
+      ...entry.baseStats === null ? {} : { baseStats: [...entry.baseStats] },
+      ...entry.maxDepth === null ? {} : { maxDepth: entry.maxDepth },
+      ...entry.level === null ? {} : { level: entry.level },
+      ...entry.gold === null ? {} : { gold: entry.gold },
+      ...entry.turn === null ? {} : { turn: entry.turn },
+      ...entry.score === null ? {} : { score: entry.score }
+    }))
+  };
+}
+async function readJournal(slot) {
+  let read;
+  try {
+    read = await slot.get();
+  } catch {
+    return null;
+  }
+  if (!read.ok) return null;
+  return parseJournal(read.value) ?? { journal: JOURNAL_FORMAT, milestones: [], graveyard: [] };
+}
+async function recordDepthMilestone(deps, event) {
+  const current = await readJournal(deps.slot);
+  if (current === null) return false;
+  if (current.milestones.some((milestone) => milestone.depth === event.depth)) return true;
+  let stamps = { level: null, turn: null };
+  try {
+    stamps = await deps.stamps();
+  } catch {
+  }
+  const merged = {
+    ...current,
+    milestones: [
+      ...current.milestones,
+      {
+        depth: event.depth,
+        levelId: event.levelId,
+        cause: event.cause,
+        arena: event.arena,
+        level: stamps.level,
+        turn: stamps.turn
+      }
+    ]
+  };
+  try {
+    const written = await deps.slot.set(storeJournal(merged));
+    if (!written.ok) {
+      deps.log(`the Borg could not record reaching depth ${String(event.depth)} in this character's save (${written.message})`);
+      return false;
+    }
+  } catch (error) {
+    deps.log(`the Borg could not record reaching depth ${String(event.depth)} in this character's save (${error instanceof Error ? error.message : String(error)})`);
+    return false;
+  }
+  return true;
+}
+function graveyardEntryOf(report) {
+  return {
+    outcome: report.outcome,
+    cause: report.cause,
+    name: typeof report.name === "string" ? report.name : null,
+    race: typeof report.race === "string" ? report.race : null,
+    class: typeof report.cls === "string" ? report.cls : null,
+    baseStats: Array.isArray(report.birth?.stats) ? report.birth.stats.filter((stat) => typeof stat === "number" && Number.isFinite(stat)) : null,
+    maxDepth: typeof report.maxDepth === "number" ? report.maxDepth : null,
+    level: typeof report.level === "number" ? report.level : null,
+    gold: typeof report.gold === "number" ? report.gold : null,
+    turn: typeof report.turn === "number" ? report.turn : null,
+    score: typeof report.score === "number" ? report.score : null
+  };
+}
+async function appendGraveyardEntry(deps, report) {
+  const current = await readJournal(deps.slot);
+  if (current === null) {
+    deps.log("the Borg could not read this character's save, so the run that just ended is not recorded in it");
+    return false;
+  }
+  const merged = { ...current, graveyard: [...current.graveyard, graveyardEntryOf(report)] };
+  try {
+    const written = await deps.slot.set(storeJournal(merged));
+    if (!written.ok) {
+      deps.log(`the Borg could not record the run that just ended in this character's save (${written.message})`);
+      return false;
+    }
+  } catch (error) {
+    deps.log(`the Borg could not record the run that just ended in this character's save (${error instanceof Error ? error.message : String(error)})`);
+    return false;
+  }
+  return true;
+}
+function installWarriorJournal(deps) {
+  let subscription = null;
+  let chain = Promise.resolve();
+  const enqueue = (operation) => {
+    const run = chain.then(operation, operation);
+    chain = run.catch(() => void 0);
+    return run;
+  };
+  let warned = false;
+  const warn = (message) => {
+    if (warned) return;
+    warned = true;
+    deps.log(message);
+  };
+  const subscribed = deps.events.on("dungeonlevel", (event) => {
+    const stamps = deps.stamps().catch(() => ({ level: null, turn: null }));
+    void enqueue(
+      () => recordDepthMilestone({ slot: deps.slot, log: warn, stamps: () => stamps }, event).then((recorded) => {
+        if (!recorded) warn("the Borg cannot record depth milestones in this character's save, so this run's depths will not be remembered");
+      })
+    );
+  }).then(
+    (result) => {
+      if (result.ok) {
+        subscription = result.value;
+      } else {
+        deps.log(`the Borg cannot hear the levels its warrior arrives on (${result.message}), so it records no depth milestones in this character's save`);
+      }
+    },
+    (error) => {
+      deps.log(`the Borg cannot hear the levels its warrior arrives on (${error instanceof Error ? error.message : String(error)}), so it records no depth milestones in this character's save`);
+    }
+  );
+  return {
+    get listening() {
+      return subscription !== null;
+    },
+    graveyard(report) {
+      return enqueue(() => appendGraveyardEntry({ slot: deps.slot, log: deps.log }, report).then(() => void 0));
+    },
+    async stop() {
+      await subscribed;
+      const held = subscription;
+      subscription = null;
+      if (held !== null) await deps.events.off(held).catch(() => void 0);
+      await chain;
+    }
+  };
+}
+
 // src/loop/restart.ts
 var messageOf2 = (error) => error instanceof Error ? error.message : String(error);
 async function flagIsDurable(slot) {
@@ -17041,6 +17246,14 @@ function installWarriorRestart(deps) {
         "the Borg's run ended but this game would not say how (no run report), so it starts no next warrior: a victory or retirement must not be buried under a restart"
       );
       return;
+    }
+    if (deps.graveyard !== void 0) {
+      try {
+        await deps.graveyard(report);
+      } catch (error) {
+        deps.log(`the Borg could not record the run that just ended (${messageOf2(error)}), so it restarts without a journal entry`);
+      }
+      if (retired()) return dropped("it was still recording the run that ended");
     }
     const diedAt = `on depth ${String(report.maxDepth)} at turn ${String(report.turn)} (${report.cause})`;
     if (report.outcome !== "death") {
@@ -17194,6 +17407,7 @@ function warriorBirth(mod2) {
 var bridge;
 var running;
 var restartHandle;
+var journalHandle;
 var startEpoch = 0;
 async function begin(mod2) {
   const mine = startEpoch;
@@ -17230,16 +17444,41 @@ async function begin(mod2) {
     grid.feat = 0;
     grid.info &= ~(BORG_MARK | BORG_VIEW);
   };
+  const journal = installWarriorJournal({
+    slot: mod2.store.character,
+    log: (message) => mod2.meta.log(message),
+    events: mod2.events,
+    stamps: async () => {
+      let level = null;
+      let turn = null;
+      try {
+        if (typeof mod2.view.player === "function") {
+          const read = await mod2.view.player();
+          if (read.ok && typeof read.value.level === "number") level = read.value.level;
+        }
+      } catch {
+      }
+      try {
+        const world = await mod2.view.world();
+        if (world.ok && typeof world.value.turn === "number") turn = world.value.turn;
+      } catch {
+      }
+      return { level, turn };
+    }
+  });
   const restart = installWarriorRestart({
     slot: mod2.store.install,
     log: (message) => mod2.meta.log(message),
     ownsKeyboard: () => mod2.act.controller.owns(),
     create: mod2.manage?.saves.create ?? null,
-    events: mod2.events
+    events: mod2.events,
+    graveyard: journal.graveyard
   });
   void restartHandle?.stop();
   restartHandle = restart;
-  return { bridge: made, tick: createTick(made, { controller: borg.controller, rewind: borg.rewind, forget }), restart };
+  void journalHandle?.stop();
+  journalHandle = journal;
+  return { bridge: made, tick: createTick(made, { controller: borg.controller, rewind: borg.rewind, forget }), restart, journal };
 }
 var definition = {
   api: ">=2.0.0 <3.0.0",
@@ -17274,6 +17513,9 @@ var definition = {
     const loop = restartHandle;
     restartHandle = void 0;
     void loop?.stop();
+    const journal = journalHandle;
+    journalHandle = void 0;
+    void journal?.stop();
     void held?.dispose();
   },
   /* Offer to play only when this character was handed to an autoplayer before or was armed from the title row. Returning false is the normal case: the mod is installed and enabled, and this character has never been handed over, so the human keeps the keyboard. */

@@ -39,9 +39,13 @@ const ENGINE = "@rpgm-tools/neo-angband-core";
  *
  * test-bind-core.ts is excluded rather than allowed: it is a vitest setup file
  * standing in for the host, it is not reachable from plugin.ts, and the builder
- * never sees it - the same reasoning that excludes *.test.ts.
+ * never sees it - the same reasoning that excludes *.test.ts. records/
+ * session.ts is excluded for the same reason from the other side: it is the
+ * headless session driver (T06), imported only by the play tests and
+ * tools/runs.mjs, never from plugin.ts's graph, and it value-imports the
+ * engine because booting real games is its whole job.
  */
-const NOT_BUNDLED = new Set(["test-bind-core.ts"]);
+const NOT_BUNDLED = new Set(["test-bind-core.ts", "session.ts"]);
 
 /**
  * Every `.ts` that ends up in the plugin bundle.
@@ -102,12 +106,16 @@ describe("nothing in the plugin bundle reaches the engine for a runtime value", 
     expect(offenders).toEqual([]);
   });
 
-  it("excludes only the setup file, and that file really is the host stand-in", () => {
+  it("excludes only files the builder never sees, and each really is host-side", () => {
     /* If test-bind-core.ts stopped calling bindCore, the exclusion above would be
-     * hiding a file that value-imports the engine for no reason. */
+     * hiding a file that value-imports the engine for no reason. The session
+     * driver is pinned the same way: it must still be booting real games. */
     const setup = readFileSync(join(srcRoot, "test-bind-core.ts"), "utf8");
     expect(valueImportsOfEngine(setup)).toHaveLength(1);
     expect(setup).toContain("bindCore(Core)");
+    const session = readFileSync(join(srcRoot, "records", "session.ts"), "utf8");
+    expect(valueImportsOfEngine(session)).toHaveLength(2); /* the values it boots with, and the namespace it binds */
+    expect(session).toContain("playWarriorSession");
   });
 
   it("still counts a value import when it sees one", () => {

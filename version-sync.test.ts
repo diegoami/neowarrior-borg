@@ -33,9 +33,10 @@ describe("the two version sites", () => {
     expect(normalized.version).toBe(document.data.version);
     expect(normalized.version).toBe("0.1.0");
     expect(normalized.capabilities).toEqual(document.data.capabilities);
-    /* FORK: T04 (#7) added event:run-end (the restart loop's one trigger),
-     * over upstream's 18. */
-    expect(normalized.capabilities).toHaveLength(19);
+    /* FORK: T04 (#7) added event:run-end (the restart loop's one trigger)
+     * and T06 (#9) added event:dungeonlevel (the journal's depth
+     * milestones), over upstream's 18. */
+    expect(normalized.capabilities).toHaveLength(20);
     expect(normalized.rules).toEqual(document.data.rules);
     expect(normalized.rules!.length).toBeGreaterThan(0);
   });

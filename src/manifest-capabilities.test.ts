@@ -35,12 +35,13 @@ describe("manifest capabilities", () => {
   });
 
   it("declares the two hidden reads the Borg makes, the turn it reads, and the events it reads", () => {
-    /* truth.monsters and truth.race are the allowlist in src/api2/truth.ts, and the game opens exactly those two with state:monsters-actual.read. The real map is never read, so state:map-actual.read stays out of the list. world().turn is filled only with state:turn.read. The run-end event is the restart loop's only trigger (T04): a death report is the one thing that may start the next warrior. */
+    /* truth.monsters and truth.race are the allowlist in src/api2/truth.ts, and the game opens exactly those two with state:monsters-actual.read. The real map is never read, so state:map-actual.read stays out of the list. world().turn is filled only with state:turn.read. The run-end event is the restart loop's only trigger (T04): a death report is the one thing that may start the next warrior. The dungeonlevel event is the journal's depth milestones (T06): the arrival the game announces is the only honest moment a depth was reached. */
     expect(capabilities()).toContain("state:monsters-actual.read");
     expect(capabilities()).toContain("state:turn.read");
     expect(capabilities()).not.toContain("state:map-actual.read");
     expect(capabilities()).toContain("event:message");
     expect(capabilities()).toContain("event:run-end");
+    expect(capabilities()).toContain("event:dungeonlevel");
   });
 
   it("holds the title seams the New Borg character row needs", () => {

@@ -160,15 +160,19 @@ describe("the built plugin.js", () => {
     expect(game.released).toHaveLength(1);
   });
 
-  it("listens for messages and run reports while it runs, and stops listening when the game stops it", async () => {
+  it("listens for messages, arrivals and run reports while it runs, and stops listening when the game stops it", async () => {
     const game = await begin();
-    /* "run-end" is T04's restart loop joining the feed: the run report is
-     * the only thing that may trigger a create. */
-    expect([...game.listeners.keys()]).toEqual(["message", "run-end"]);
+    /* "dungeonlevel" is T06's journal joining the feed: the arrival event is
+     * what records a depth milestone. "run-end" is T04's restart loop: the
+     * run report is the only thing that may trigger a create. */
+    expect([...game.listeners.keys()]).toEqual(["message", "dungeonlevel", "run-end"]);
     await built.stop?.();
-    /* The bridge retires synchronously; the loop's retirement waits one
-     * microtask for its subscription handle to settle, so it lands second. */
-    expect(game.unsubscribed).toEqual(["message", "run-end"]);
+    /* The bridge retires synchronously; the loop's and the journal's
+     * retirements wait a microtask each for their subscription handles to
+     * settle, so both land after the message listener. Which of the two
+     * lands first is not a property anything depends on, so the assertion is
+     * the set: all three gone, nothing else touched. */
+    expect([...game.unsubscribed].sort()).toEqual(["dungeonlevel", "message", "run-end"]);
   });
 
   it("restarts its dead warrior through the roster seam, once, flagged first", async () => {
@@ -185,6 +189,48 @@ describe("the built plugin.js", () => {
     /* The slot's whole contents at rest: the flag standing for the next
      * page's presenter (a fresh fake slot had no siblings to keep). */
     expect(game.installSlot.value).toEqual({ warriorBirth: true });
+    /* T06: the run that ended is recorded in the CHARACTER's slot - the
+     * partial report this fake sends still names the outcome and the
+     * killer, and the entry says null rather than a guess for the rest. */
+    const journal = game.characterSlot.value as { graveyard?: Array<Record<string, unknown>> };
+    expect(journal.graveyard).toEqual([
+      expect.objectContaining({ outcome: "death", cause: "a novice mage", maxDepth: 3, turn: 99 }),
+    ]);
+  });
+
+  it("records the run that ended in the character's save BEFORE it creates the next warrior", async () => {
+    /* T06's ordering, witnessed at the moment create ran: the graveyard
+     * entry must already be standing in the character's slot, because the
+     * page teardown a successful create causes is exactly the hazard the
+     * ordering exists for. Read from the slot's own contents captured
+     * inside the create, not from anything the mod promised. */
+    const atCreate: unknown[] = [];
+    const game = await begin({
+      onCreate: () => atCreate.push(structuredClone(game.characterSlot.value)),
+    });
+    const report = { key: "cedar", report: { outcome: "death", cause: "a grey mold", maxDepth: 2, turn: 500 } };
+    game.listeners.get("run-end")?.(report as never);
+    for (let i = 0; i < 32; i++) await Promise.resolve();
+    expect(game.created).toEqual([{ resumeAutoplayer: true }]);
+    expect(atCreate).toHaveLength(1);
+    const witnessed = atCreate[0] as { graveyard?: Array<Record<string, unknown>> };
+    expect(witnessed.graveyard?.[0]).toMatchObject({ outcome: "death", cause: "a grey mold" });
+  });
+
+  it("records a depth milestone when its warrior arrives on a level", async () => {
+    const game = await begin();
+    game.listeners.get("dungeonlevel")?.({ depth: 2, levelId: 3, cause: "change", arena: false } as never);
+    for (let i = 0; i < 16; i++) await Promise.resolve();
+    const journal = game.characterSlot.value as { milestones?: Array<Record<string, unknown>> };
+    expect(journal.milestones).toEqual([
+      expect.objectContaining({ depth: 2, levelId: 3, cause: "change", arena: false }),
+    ]);
+    /* The load re-fire adds nothing: one milestone per depth. */
+    game.listeners.get("dungeonlevel")?.({ depth: 2, levelId: 9, cause: "load", arena: false } as never);
+    for (let i = 0; i < 16; i++) await Promise.resolve();
+    const after = game.characterSlot.value as { milestones?: Array<Record<string, unknown>> };
+    expect(after.milestones).toHaveLength(1);
+    await built.stop?.();
   });
 
   it("starts nothing at a death it did not drive, and nothing without the roster seam", async () => {
@@ -193,6 +239,11 @@ describe("the built plugin.js", () => {
     for (let i = 0; i < 32; i++) await Promise.resolve();
     expect(drivenByOther.created).toEqual([]);
     expect(drivenByOther.installSlot.value).toBeNull();
+    /* T06: the run that ended is still recorded - a dead warrior is a dead
+     * warrior whoever held the keyboard; it is the NEXT one this mod will
+     * not start. */
+    const journal = drivenByOther.characterSlot.value as { graveyard?: Array<Record<string, unknown>> };
+    expect(journal.graveyard).toEqual([expect.objectContaining({ outcome: "death", cause: "x" })]);
 
     const noSeam = await begin({ saves: "absent" });
     noSeam.listeners.get("run-end")?.({ key: "cedar", report: { outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
@@ -216,6 +267,7 @@ describe("the built plugin.js", () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(game.listeners.has("run-end")).toBe(false);
+    expect(game.listeners.has("dungeonlevel")).toBe(false);
     game.listeners.get("run-end")?.({ key: "cedar", report: { outcome: "death", cause: "x", maxDepth: 1, turn: 1 } } as never);
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(game.created).toEqual([]);
@@ -223,8 +275,7 @@ describe("the built plugin.js", () => {
     expect(said(game)).toContain("installed nothing");
     /* The aborted start's bridge is disposed too: the message listener its
      * prime subscribed leaves with it. */
-    expect(game.unsubscribed).toEqual(["message"]);
-  });
+    expect(game.unsubscribed).toEqual(["message"]);  });
 
   it("lets a fresh start install after a stop, and stops a stale older start from disturbing it", async () => {
     /* #30's second requirement: start A is stopped mid-start, start B

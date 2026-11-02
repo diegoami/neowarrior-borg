@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
 const srcRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(srcRoot);
 
-/** The adapter itself, the bridge that binds the engine from the mod API, the vitest setup file that stands in for the host, and the fake game the bundle test drives. */
-const ALLOWED = new Set(["src/core-api.ts", "src/api2/host.ts", "src/test-bind-core.ts", "src/harness-api2.ts"]);
+/** The adapter itself, the bridge that binds the engine from the mod API, the vitest setup file that stands in for the host, the fake game the bundle test drives, and the headless session driver that boots the real engine the way the play tests do. */
+const ALLOWED = new Set(["src/core-api.ts", "src/api2/host.ts", "src/test-bind-core.ts", "src/harness-api2.ts", "src/records/session.ts"]);
 
 /** Fakes for tests, and the bridge that turns the known world into the view, are built from the host's own view and action types. */
 const MAY_NAME_HOST_TYPES = new Set(["src/harness.ts", "src/api2/act.ts", "src/api2/world.ts"]);

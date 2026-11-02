@@ -104,6 +104,7 @@ import type {
   Api2RunEndEvent,
   Api2Slot,
   Api2Subscription,
+  RunReport,
 } from "@rpgm-tools/neo-angband-mod-sdk";
 import { BIRTH_FLAG_KEY, clearWarriorBirthFlag, setWarriorBirthFlag } from "../birth/presenter.js";
 
@@ -133,6 +134,18 @@ export interface WarriorRestartDeps {
    * event, needing the manifest's `event:run-end` grant.
    */
   readonly events: Pick<Api2Events, "on" | "off">;
+  /**
+   * FORK: T06 (#9) - the graveyard writer, the journal's record of the run
+   * that just ended. Awaited at the head of the report path - before the
+   * outcome checks, before the flag, before create - so the record lands
+   * before anything that could tear the page down, a crash in `create`
+   * included. Optional because the loop is older than the journal: without
+   * it the report path is exactly what T04 shipped. The writer itself never
+   * rejects (src/records/journal.ts), and a refusal or throw here is
+   * contained the same way a create failure is: the run still restarts, and
+   * the log says the record could not be kept.
+   */
+  readonly graveyard?: (report: RunReport) => Promise<void>;
 }
 
 /** A running restart loop. */
@@ -240,6 +253,23 @@ export function installWarriorRestart(deps: WarriorRestartDeps): WarriorRestart 
           "a victory or retirement must not be buried under a restart",
       );
       return;
+    }
+
+    /* FORK: T06 (#9) - the graveyard entry FIRST, whatever the outcome turns
+     * out to be: victory and retirement are runs the journal owes a record of
+     * exactly as much as a death is, and the report that just arrived is the
+     * only moment the game is telling us how it ended. This await sits ahead
+     * of the flag and the create on purpose (a record written after create
+     * races the page teardown and can be lost to it); a journal that cannot
+     * write says so itself and never blocks the restart, and a throw here is
+     * contained like every other seam's. */
+    if (deps.graveyard !== undefined) {
+      try {
+        await deps.graveyard(report);
+      } catch (error: unknown) {
+        deps.log(`the Borg could not record the run that just ended (${messageOf(error)}), so it restarts without a journal entry`);
+      }
+      if (retired()) return dropped("it was still recording the run that ended");
     }
 
     const diedAt = `on depth ${String(report.maxDepth)} at turn ${String(report.turn)} (${report.cause})`;

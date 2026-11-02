@@ -261,6 +261,8 @@ async function installed(options: {
   readonly owns?: () => Api2Call<boolean>;
   readonly create?: ReturnType<typeof createRecorder> | null;
   readonly events?: ReturnType<typeof eventBus>;
+  /** FORK: T06 - the graveyard writer the loop awaits ahead of its flag/create sequence. */
+  readonly graveyard?: (report: RunReport) => Promise<void>;
 } = {}): Promise<Fixture> {
   const logs: string[] = [];
   const theSlot = options.slot ?? slot({ profileIds: ["p1"] });
@@ -272,6 +274,7 @@ async function installed(options: {
     ownsKeyboard: options.owns ?? owns({ ok: true, value: true }),
     create: recorder === null ? null : recorder.fn,
     events: bus.api,
+    ...(options.graveyard === undefined ? {} : { graveyard: options.graveyard }),
   });
   await settle();
   return {
@@ -565,5 +568,102 @@ describe("the warrior restart loop", () => {
     const f = await installed({ events: eventBus({ refuse: true }) });
     expect(f.restart.listening).toBe(false);
     expect(f.logs().join(" ")).toContain("cannot hear how its runs end");
+  });
+
+  /* ------------------------------------------------------------------
+   * FORK: T06 (#9) - the graveyard writer the report path awaits
+   * ------------------------------------------------------------------ */
+
+  it("writes the graveyard entry before the flag and the create, and restarts anyway when the writer fails", async () => {
+    /* THE ORDER the task pins: journal, then flag, then create - read from
+     * what happened, not from what anyone promised. The recorder's own
+     * slot-at-call witness already proves flag-before-create; this adds the
+     * graveyard call ahead of both. */
+    const calls: string[] = [];
+    const theSlot = slot({ profileIds: ["p1"] });
+    const recorder = createRecorder("ok", theSlot);
+    const recording = await installed({
+      slot: theSlot,
+      create: recorder,
+      graveyard: async (theReport) => {
+        calls.push(`graveyard:${theReport.outcome}:${theReport.cause}`);
+      },
+    });
+    await unhandledRejections(() => recording.bus.report({ key: "cedar", report: report("death") }));
+    expect(calls).toEqual(["graveyard:death:a novice mage"]);
+    expect(recorder.calls()).toEqual([{ resumeAutoplayer: true }]);
+    expect((recorder.slotAtCall()[0] as Record<string, unknown>)["warriorBirth"]).toBe(true);
+
+    /* A writer that THROWS is contained: the run still restarts, nothing
+     * escapes, and the log says the record could not be kept. */
+    const broken = await installed({
+      graveyard: () => Promise.reject(new Error("the save is on fire")),
+    });
+    const seen = await unhandledRejections(() => broken.bus.report({ key: "cedar", report: report("death") }));
+    expect(seen).toEqual([]);
+    expect(broken.created()).toEqual([{ resumeAutoplayer: true }]);
+    expect(broken.logs().join(" ")).toContain("could not record the run that just ended");
+  });
+
+  it("writes the graveyard entry for a victory and a retirement too, and still ends the session", async () => {
+    for (const outcome of ["winner", "retired"] as const) {
+      const calls: string[] = [];
+      const f = await installed({ graveyard: async (theReport) => { calls.push(theReport.outcome); } });
+      await unhandledRejections(() => f.bus.report({ key: "cedar", report: report(outcome) }));
+      expect(calls).toEqual([outcome]);
+      expect(f.created()).toEqual([]);
+      expect(f.held()).toEqual({ profileIds: ["p1"] });
+    }
+  });
+
+  it("writes no graveyard entry for a report it cannot read, and none twice on one page", async () => {
+    /* A report with no body consumes the page's one-report budget (the spent
+     * latch is ahead of the null check), so it records nothing - and a page
+     * that already used its report records no second entry either. */
+    const unreadable: string[] = [];
+    const blank = await installed({ graveyard: async (theReport) => { unreadable.push(theReport.outcome); } });
+    await unhandledRejections(() => blank.bus.report({ key: "cedar", report: null }));
+    await unhandledRejections(() => blank.bus.report({ key: "cedar", report: report("death") }));
+    expect(unreadable).toEqual([]);
+    expect(blank.created()).toEqual([]);
+
+    const calls: string[] = [];
+    const f = await installed({ graveyard: async (theReport) => { calls.push(theReport.outcome); } });
+    await unhandledRejections(() => f.bus.report({ key: "cedar", report: report("death") }));
+    await unhandledRejections(() => f.bus.report({ key: "cedar", report: report("death") }));
+    expect(calls).toEqual(["death"]);
+    expect(f.created()).toHaveLength(1);
+  });
+
+  it("drops a report that was still writing its graveyard entry when the loop stopped", async () => {
+    /* #29's newest shape: the stop lands while the graveyard write is parked.
+     * The epoch must retire the continuation - no flag write, no create, no
+     * claim in the log - exactly as it does at every other await. */
+    let releaseWrite!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    const theSlot = slot({ profileIds: ["p1"] });
+    const f = await installed({
+      slot: theSlot,
+      create: createRecorder("ok", theSlot),
+      graveyard: () => gate,
+    });
+
+    f.bus.report({ key: "cedar", report: report("death") });
+    await settle(8); /* the report is parked inside the graveyard write */
+    await f.restart.stop();
+    expect(f.created()).toEqual([]);
+
+    const seen = await unhandledRejections(() => {
+      releaseWrite();
+    });
+    expect(seen).toEqual([]);
+    expect(f.created()).toEqual([]);
+    expect(f.held()).toEqual({ profileIds: ["p1"] });
+    const said = f.logs().join(" ");
+    expect(said).toContain("report is dropped");
+    expect(said).not.toContain("starting the next one");
+    expect(said).not.toContain("could not start the next warrior");
   });
 });

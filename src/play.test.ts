@@ -27,91 +27,21 @@
  * rather than passing on nothing.
  */
 
-import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  BIRTH_STAT_BASE,
-  BIRTH_STAT_COSTS,
-  ContentIdResolver,
-  LOOP_STATUS,
-  MAX_BIRTH_POINTS,
-  bindPlayer,
-  installController,
-  runGameLoop,
-  startGame,
-} from "@rpgm-tools/neo-angband-core";
+import { ContentIdResolver, LOOP_STATUS, installController, runGameLoop, startGame } from "@rpgm-tools/neo-angband-core";
 import type { GamePack, GameState, StartedGame } from "@rpgm-tools/neo-angband-core";
 import { createBorg } from "./controller.js";
 import { makeCoreResolvers } from "./resolvers.js";
-import { ladderFromCostTable, planWarriorBirth, WARRIOR_CLASS_NAME, type WarriorBuildPlan } from "./birth/plan.js";
+import { loadPack, packRoot, playWarriorSession, warriorSessionPlan } from "./records/session.js";
+import { runsBuildFacts, sessionRunsDocument } from "./records/reporter.js";
+import { WARRIOR_CLASS_NAME, type WarriorBuildPlan } from "./birth/plan.js";
 import { WARRIOR_RACE_CANDIDATES } from "./birth/settings.js";
 
-/** The game's checkout, holding the content pack a real boot needs. */
-function packRoot(): string | null {
-  const roots = [
-    process.env["NEO_ANGBAND_REPO"],
-    fileURLToPath(new URL("../../neo-angband/", import.meta.url)),
-  ].filter((r): r is string => typeof r === "string" && r.length > 0);
-  for (const root of roots) {
-    const dir = join(root, "packages", "content", "pack");
-    if (existsSync(join(dir, "constants.json"))) return dir;
-  }
-  return null;
-}
-
 const PACK_DIR = packRoot();
-
-function loadPack(dir: string): GamePack {
-  const json = <T,>(name: string): T =>
-    JSON.parse(readFileSync(join(dir, `${name}.json`), "utf8")) as T;
-  const records = <T,>(name: string): T[] => json<{ records: T[] }>(name).records;
-  return {
-    constants: json("constants"),
-    terrain: records("terrain"),
-    roomTemplates: records("room_template"),
-    vaults: records("vault"),
-    dungeonProfiles: records("dungeon_profile"),
-    projection: records("projection"),
-    trap: records("trap"),
-    names: records("names"),
-    quest: records("quest"),
-    obj: {
-      objectBase: json("object_base"),
-      object: json("object"),
-      egoItem: json("ego_item"),
-      artifact: json("artifact"),
-      curse: json("curse"),
-      brand: json("brand"),
-      slay: json("slay"),
-      activation: json("activation"),
-      objectProperty: json("object_property"),
-      flavor: json("flavor"),
-    } as GamePack["obj"],
-    mon: {
-      pain: records("pain"),
-      blowMethods: records("blow_methods"),
-      blowEffects: records("blow_effects"),
-      monsterSpells: records("monster_spell"),
-      monsterBases: records("monster_base"),
-      monsters: records("monster"),
-      summons: records("summon"),
-      pits: records("pit"),
-    },
-    mon2: undefined,
-    player: {
-      races: records("p_race"),
-      classes: records("class"),
-      properties: records("player_property"),
-      timed: records("player_timed"),
-      shapes: records("shape"),
-      bodies: records("body"),
-      history: records("history"),
-      realms: records("realm"),
-    },
-  } as unknown as GamePack;
-}
+/* src/ → the repository root, where manifest.json and package.json sit. */
+const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 /** What a run did, in the terms a stall shows up in. */
 interface RunReport {
@@ -453,22 +383,13 @@ suite("the warrior restart loop, headless", () => {
   /**
    * The plan the presenter replays, computed exactly as plugin.ts wires it:
    * the same module, the published engine's own cost table and point budget,
-   * this explicit race. This is the ONE plan both callers share; a
-   * disagreement between the harness's warrior and the presenter's is a bug
-   * in one of them, not a choice each makes.
+   * this explicit race. This is the ONE plan every caller shares (T06 moved
+   * it into src/records/session.ts so the session driver answers to the same
+   * arithmetic); a disagreement between the harness's warrior and the
+   * presenter's is a bug in one of them, not a choice each makes.
    */
   function warriorBuildPlan(): WarriorBuildPlan {
-    const players = bindPlayer(pack!.player);
-    return planWarriorBirth({
-      catalogue: {
-        races: players.races.map((race) => ({ name: race.name, statAdj: race.statAdj })),
-        classes: players.classes.map((cls) => ({ name: cls.name, statAdj: cls.statAdj })),
-        stats: ["STR", "INT", "WIS", "DEX", "CON"],
-        pointBudget: MAX_BIRTH_POINTS,
-      },
-      raceName: WARRIOR_RACE,
-      costs: ladderFromCostTable(BIRTH_STAT_COSTS, BIRTH_STAT_BASE),
-    });
+    return warriorSessionPlan(pack!, WARRIOR_RACE);
   }
 
   /** What one warrior's life shows, in the terms the loop cares about. */
@@ -654,4 +575,122 @@ suite("the warrior restart loop, headless", () => {
       bootPlannedWarrior(seed, plan);
     }
   }, 60_000);
+
+  /* ------------------------------------------------------------------
+   * FORK: T06 (#9) - the recorded session
+   * ------------------------------------------------------------------ */
+  when("records its session: journal depths, the graveyard, and the reporter's runs.json", async () => {
+    /* THE SESSION, through the same driver (src/records/session.ts) whose
+     * output gets committed to docs/runs/ by tools/runs.mjs: the mod's own
+     * journal installed per character, fed by the engine's real `dungeonlevel`
+     * arrivals, its graveyard entry awaited before the next warrior boots -
+     * the loop's journal-before-create ordering - and the reporter turning
+     * the lives into the runs.json schema. The seeds are the chain's first
+     * three (pinned: each dies on depth 1 well inside the cap). */
+    const seeds = [20, 23, 34];
+    const session = await playWarriorSession(pack!, { seeds, capFor: () => 600 });
+
+    /* AT LEAST ONE DEATH AND ONE REBIRTH, which is this test's requirement
+     * (T04's own chain test pins the strict all-four-die chain on these
+     * seeds): the first warrior died, and its death is what booted the
+     * second one - the driver boots only behind a death, so a second life
+     * IS the rebirth. A warrior that survives its slice ends the session,
+     * and its life still gets every record assertion below. */
+    expect(session.lives.length).toBeGreaterThanOrEqual(2);
+    expect(session.lives[0]!.dead, "the session's first warrior had to die for the next one to boot").toBe(true);
+    expect(session.lives.filter((life) => life.dead).length).toBeGreaterThanOrEqual(1);
+
+    for (const life of session.lives) {
+      const journal = life.journal;
+      expect(journal, `seed ${String(life.seed)} left no journal in its character's save`).not.toBeNull();
+
+      /* THE DEPTHS ACTUALLY VISITED, read from the live game (the harness
+       * observed state.chunk.depth after every decision), not from the
+       * journal's own claims: the sets match, and no depth is doubled - the
+       * load re-fires the driver delivered for every visited depth happened
+       * BEFORE this read, so a dedup failure would show as a length gap. */
+      const depths = journal!.milestones.map((m) => m.depth);
+      expect(new Set(depths), `seed ${String(life.seed)}: journal depths vs the game's`).toEqual(new Set(life.depthsVisited));
+      expect(depths, `seed ${String(life.seed)}: a depth was recorded twice`).toHaveLength(new Set(depths).size);
+      /* The game's own deepest record agrees with both views of the run. */
+      expect(life.maxDepth).toBe(Math.max(...life.depthsVisited));
+
+      /* The stamps are the live game at the arrival, captured by the
+       * harness's own listener - the (level, turn) the character had when
+       * it arrived, not when anyone got around to asking. */
+      for (const milestone of journal!.milestones) {
+        expect({ level: milestone.level, turn: milestone.turn }).toEqual(life.arrivalStamps.get(milestone.depth));
+      }
+
+      /* THE GRAVEYARD: one entry per DEAD warrior, with the killer the game
+       * reported (the player's own died-from, read from the live player).
+       * A survivor's slot holds no entry: no run ended. */
+      if (life.dead) {
+        expect(journal!.graveyard).toHaveLength(1);
+        expect(journal!.graveyard[0]).toMatchObject({
+          outcome: "death",
+          cause: life.causeOfDeath,
+          name: expect.any(String),
+          race: life.race,
+          class: life.className,
+          baseStats: [...life.baseStats],
+          maxDepth: life.maxDepth,
+          level: life.clvl,
+          gold: life.gold,
+          turn: life.turns,
+          score: expect.any(Number),
+        });
+      } else {
+        expect(journal!.graveyard).toEqual([]);
+      }
+    }
+
+    /* THE REPORTER'S runs.json, FIELD BY FIELD against the lives (each of
+     * which was read from the live game above) - never a snapshot of the
+     * reporter's own output. */
+    const document = sessionRunsDocument({
+      recorded: "2026-11-02",
+      facts: runsBuildFacts({ repoRoot: REPO_ROOT, content: PACK_DIR!, seeds, caps: { decisions: 600 } }),
+      runs: session.lives.map((life) => ({
+        seed: life.seed,
+        race: life.race,
+        className: life.className,
+        baseStats: life.baseStats,
+        decisions: life.decisions,
+        turns: life.turns,
+        maxDepth: life.maxDepth,
+        clvl: life.clvl,
+        kills: life.kills,
+        gold: life.gold,
+        causeOfDeath: life.causeOfDeath,
+        commands: life.commands,
+      })),
+    });
+    expect(document.build.mod).toMatch(/^Warrior Borg \d/u);
+    expect(document.build.seeds).toEqual(seeds);
+    for (const [index, life] of session.lives.entries()) {
+      expect(document.runs[index], `runs.json entry for seed ${String(life.seed)}`).toEqual({
+        seed: life.seed,
+        build: { race: life.race, class: life.className, baseStats: [...life.baseStats] },
+        decisions: life.decisions,
+        turns: life.turns,
+        maxDepth: life.maxDepth,
+        clvl: life.clvl,
+        kills: life.kills,
+        gold: life.gold,
+        causeOfDeath: life.causeOfDeath,
+        commands: life.commands,
+      });
+      /* Kills come from the game's own lore counters (per-race pkills,
+       * summed - the number the character dump prints): a count, never a
+       * guess, and never negative. */
+      expect(Number.isInteger(life.kills)).toBe(true);
+      expect(life.kills).toBeGreaterThanOrEqual(0);
+    }
+    /* The census the harness counted and the census the reporter wrote are
+     * the same table: every issued command code appears, with its count. */
+    const census = session.lives.map((life) => Object.values(life.commands).reduce((a, b) => a + b, 0));
+    expect(census.every((count) => count > 0)).toBe(true);
+  }, 300_000);
 });
+

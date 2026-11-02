@@ -1,0 +1,134 @@
+{
+  "recorded": "2026-11-02",
+  "build": {
+    "mod": "Warrior Borg 0.1.0",
+    "engine": "@rpgm-tools/neo-angband-core 1.23.0-beta.1",
+    "content": "sibling checkout neo-angband at fc68bccc1 (content pack unchanged since 836b8da2a, v1.23.0-beta.2)",
+    "seeds": [
+      20,
+      23,
+      34,
+      49
+    ],
+    "caps": {
+      "decisions": 600
+    }
+  },
+  "runs": [
+    {
+      "seed": 20,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 363,
+      "turns": 5049,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 4,
+      "gold": 146,
+      "causeOfDeath": "floating eye",
+      "commands": {
+        "descend": 6,
+        "walk": 346,
+        "ascend": 5,
+        "rest": 5,
+        "quaff": 1,
+        "pickup": 1
+      }
+    },
+    {
+      "seed": 23,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 369,
+      "turns": 3605,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 11,
+      "gold": 162,
+      "causeOfDeath": "wild dog",
+      "commands": {
+        "descend": 9,
+        "ascend": 8,
+        "walk": 342,
+        "open": 8,
+        "quaff": 2,
+        "pickup": 1
+      }
+    },
+    {
+      "seed": 34,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 44,
+      "turns": 1365,
+      "maxDepth": 1,
+      "clvl": 1,
+      "kills": 1,
+      "gold": 149,
+      "causeOfDeath": "grey mold",
+      "commands": {
+        "descend": 1,
+        "walk": 40,
+        "quaff": 1,
+        "open": 3
+      }
+    },
+    {
+      "seed": 49,
+      "build": {
+        "race": "Half-Troll",
+        "class": "Warrior",
+        "baseStats": [
+          18,
+          10,
+          10,
+          10,
+          17
+        ]
+      },
+      "decisions": 244,
+      "turns": 2356,
+      "maxDepth": 1,
+      "clvl": 2,
+      "kills": 1,
+      "gold": 140,
+      "causeOfDeath": "giant white centipede",
+      "commands": {
+        "descend": 6,
+        "walk": 142,
+        "ascend": 5,
+        "quaff": 1,
+        "pickup": 1,
+        "open": 4,
+        "tunnel": 86
+      }
+    }
+  ]
+}

@@ -52,6 +52,13 @@ export interface FakeGameOptions {
   readonly saves?: "ok" | "refused" | "absent";
   /** How `act.submit` answers a command. Default: accepts everything. */
   readonly submit?: (intent: Api2Intent) => boolean;
+  /**
+   * Called inside the roster's create, at the moment of the call, so a test
+   * can witness the world (the character slot, the install slot) exactly
+   * when the next warrior is started - the journal-before-create ordering is
+   * asserted from here, not from anyone's bookkeeping.
+   */
+  readonly onCreate?: () => void;
 }
 
 export interface FakeGame {
@@ -66,6 +73,8 @@ export interface FakeGame {
   readonly listeners: Map<string, (payload: never) => void>;
   readonly unsubscribed: string[];
   readonly installSlot: { value: unknown };
+  /** The current character's slot in its own save (mod.store.character): what the journal records into. */
+  readonly characterSlot: { value: unknown };
   /** The create options the mod passed the roster seam, if it ever did. */
   readonly created: unknown[];
   /** The input wait the game would hand the controller. */
@@ -165,6 +174,7 @@ export function fakeGame(options: FakeGameOptions = {}): FakeGame {
   const listeners = new Map<string, (payload: never) => void>();
   const unsubscribed: string[] = [];
   const installSlot = { value: null as unknown };
+  const characterSlot = { value: null as unknown };
   const created: unknown[] = [];
   const noscore = options.noscore ?? 0;
 
@@ -229,27 +239,35 @@ export function fakeGame(options: FakeGameOptions = {}): FakeGame {
       records: (_file: string): ReturnType<ModApi2["content"]["records"]> => ok([] as readonly JsonRecord[]),
       activation: () => ok(null),
     },
-    store: { install: { get: () => ok(installSlot.value), set: (value: unknown) => { installSlot.value = value; return ok(null); } } },
+    store: {
+      install: { get: () => ok(installSlot.value), set: (value: unknown) => { installSlot.value = value; return ok(null); } },
+      /* The current character's slot in its own save, where the journal
+       * records; a get before any character exists would be the host's
+       * refusal, but the journal is installed while a character plays, so
+       * the fake answers like a live save. */
+      character: { get: () => ok(characterSlot.value), set: (value: unknown) => { characterSlot.value = value; return ok(null); } },
+    },
     /* The roster seam (manage.saves), present by default as for a game that
      * granted saves:manage. "absent" leaves the whole manage domain off, the
      * way a host that gives this mod no first-party seam does. */
-    ...((options.saves ?? "ok") === "absent"
+    ...(options.saves ?? "ok") === "absent"
       ? {}
       : {
           manage: {
             saves: {
               create: (request: unknown) => {
                 created.push(request);
+                options.onCreate?.();
                 return (options.saves === "refused"
                   ? refused("the roster is busy")
                   : ok(null)) as ReturnType<NonNullable<ModApi2["manage"]>["saves"]["create"]>;
               },
             },
           },
-        }),
+        },
     ...(truth === undefined ? {} : { truth }),
   } as unknown as ModApi2;
 
   void (null as unknown as LoadoutSimulation);
-  return { mod, view, logs, submitted, answered, released, truthCalls, listeners, unsubscribed, installSlot, created, input };
+  return { mod, view, logs, submitted, answered, released, truthCalls, listeners, unsubscribed, installSlot, characterSlot, created, input };
 }

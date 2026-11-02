@@ -70,6 +70,7 @@ import { createTick, type Tick } from "./src/api2/controller.js";
 import { BORG_MARK, BORG_VIEW } from "./src/world/grid.js";
 import { createWarriorBirthPresenter } from "./src/birth/presenter.js";
 import { RACE_CHOICE_SETTING, resolveWarriorRace } from "./src/birth/settings.js";
+import { installWarriorJournal, type WarriorJournal } from "./src/records/journal.js";
 import { installWarriorRestart, type WarriorRestart } from "./src/loop/restart.js";
 
 /**
@@ -218,6 +219,8 @@ interface Running {
   readonly tick: Tick;
   /** FORK: T04 (#7) - the restart loop, so a stop can retire it with the bridge. */
   readonly restart: WarriorRestart;
+  /** FORK: T06 (#9) - the journal, retired with the loop and the bridge. */
+  readonly journal: WarriorJournal;
 }
 
 /**
@@ -306,6 +309,9 @@ let bridge: Bridge | undefined;
 let running: Promise<Running | null> | undefined;
 /* FORK: T04 (#7) - the restart loop's handle, retired in stop() with the bridge. */
 let restartHandle: WarriorRestart | undefined;
+/* FORK: T06 (#9) - the journal's handle, retired the same way. Module-level
+ * for the same reason: a stop can land before `running` settles. */
+let journalHandle: WarriorJournal | undefined;
 /**
  * FORK: T04 fixes (#30) - the installation epoch. stop() bumps it
  * SYNCHRONOUSLY; a begin that was still starting when stop ran finds the
@@ -365,28 +371,70 @@ async function begin(mod: ModApi2): Promise<Running | null> {
     grid.feat = 0;
     grid.info &= ~(BORG_MARK | BORG_VIEW);
   };
-  /* FORK: T04 (#7) - the restart loop. Every piece is a slice of this mod's
+  /* FORK: T06 (#9) - the journal, installed BEFORE the restart loop so the
+   * loop can be handed the graveyard writer it awaits ahead of its
+   * flag/create sequence. Every piece is again a slice of this mod's own
+   * context: the character's slot in its own save (the host scopes it to the
+   * character, which is what "stored under ctx.character.key()" means in
+   * API 2), the log, the event domain the level arrivals arrive on (the
+   * manifest's event:dungeonlevel grant), and the cheap stamps - the
+   * character's level from the player read the mod already holds, the turn
+   * from the world snapshot it already reads per decision. The protocol and
+   * the dedup rule are documented in src/records/journal.ts. */
+  const journal = installWarriorJournal({
+    slot: mod.store.character,
+    log: (message) => mod.meta.log(message),
+    events: mod.events,
+    stamps: async () => {
+      /* Neither read may exist on a given host (the fake game has no player
+       * seam); a milestone without stamps is still a milestone. */
+      let level: number | null = null;
+      let turn: number | null = null;
+      try {
+        if (typeof mod.view.player === "function") {
+          const read = await mod.view.player();
+          if (read.ok && typeof read.value.level === "number") level = read.value.level;
+        }
+      } catch {
+        /* Kept null; the milestone still records the arrival. */
+      }
+      try {
+        const world = await mod.view.world();
+        if (world.ok && typeof world.value.turn === "number") turn = world.value.turn;
+      } catch {
+        /* Kept null. */
+      }
+      return { level, turn };
+    },
+  });
+  /* FORK: T04 (#7) - the restart loop, with the journal's graveyard writer:
+   * the record of the run that ended is awaited inside the report path
+   * BEFORE the birth flag and the create, so the page teardown a successful
+   * create causes can never lose it. Every piece is a slice of this mod's
    * own context: the install slot the birth flag lives in, the log, the
    * keyboard-ownership question, the roster's create (absent on a host that
    * gives this mod no manage seam - the loop says so and the run ends at its
    * death), and the event domain the run report arrives on. The protocol it
-   * implements - death, report, flag, create, reload, presenter, armed
-   * controller - and every failure mode's landing place are documented in
-   * src/loop/restart.ts. */
+   * implements - death, report, journal, flag, create, reload, presenter,
+   * armed controller - and every failure mode's landing place are documented
+   * in src/loop/restart.ts. */
   const restart = installWarriorRestart({
     slot: mod.store.install,
     log: (message) => mod.meta.log(message),
     ownsKeyboard: () => mod.act.controller.owns(),
     create: mod.manage?.saves.create ?? null,
     events: mod.events,
+    graveyard: journal.graveyard,
   });
-  /* Module-level so stop() can retire it even before `running` settles, and
-   * retired here the same way the bridge is, so a second start on the same
-   * page (a start without a stop) never leaves two loops listening for one
-   * report. */
+  /* Module-level so stop() can retire them even before `running` settles,
+   * and retired here the same way the bridge is, so a second start on the
+   * same page (a start without a stop) never leaves two loops listening for
+   * one report. */
   void restartHandle?.stop();
   restartHandle = restart;
-  return { bridge: made, tick: createTick(made, { controller: borg.controller, rewind: borg.rewind, forget }), restart };
+  void journalHandle?.stop();
+  journalHandle = journal;
+  return { bridge: made, tick: createTick(made, { controller: borg.controller, rewind: borg.rewind, forget }), restart, journal };
 }
 
 const definition: Api2ModDefinition = {
@@ -431,10 +479,14 @@ const definition: Api2ModDefinition = {
     /* FORK: T04 (#7) - the restart loop's run-report listener leaves with
      * the rest, for the same reason: a re-registration on the same page
      * must not leave two loops listening for one report. Torn down before
-     * the bridge (reverse of begin's order). */
+     * the bridge (reverse of begin's order). FORK: T06 (#9) - the journal's
+     * arrival listener leaves with them, for the same reason again. */
     const loop = restartHandle;
     restartHandle = undefined;
     void loop?.stop();
+    const journal = journalHandle;
+    journalHandle = undefined;
+    void journal?.stop();
     void held?.dispose();
   },
 

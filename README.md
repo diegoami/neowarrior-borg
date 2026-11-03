@@ -1,8 +1,8 @@
 > **ARCHIVED 2026-11-03.** This fork's successor is
 > [better-borg](https://github.com/diegoami/better-borg) (the M2 unification,
-> its issue #15, squash \`fb83725\`), which renames to **Mandos** next (its #19).
+> its issue #15, squash `fb83725`), which renames to **Mandos** next (its #19).
 > Its class-agnostic instruments, the warrior strategy pack, and every committed
-> run record moved there (\`docs/runs/README.md\` Provenance names the source SHAs;
+> run record moved there (`docs/runs/README.md` Provenance names the source SHAs;
 > the copies are byte-identical). Nothing writes here anymore - this history is
 > the immutable record. Open follow-ups were migrated; v0.1.0 is the final tag.
 

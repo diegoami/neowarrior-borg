@@ -23,8 +23,14 @@ creation seams the game grants only to first-party mods, #28):
    trusts `diegoami/neowarrior-borg` as a first-party origin and carries the
    local engine `noteSpot` fix (upstream neostryder/neo-angband#428) until a
    fixed engine releases.
-2. Build and launch as a lab build: `NEO_ANGBAND_LAB_BUILD=1 pnpm dev` (web —
-   add `?labtrust=neowarrior` to the URL) or the desktop build with
+2. One-time, at the game repo root: `pnpm install --frozen-lockfile && pnpm build` —
+   the workspace packages' `dist/` must exist before the dev server runs (vite
+   resolves e.g. `@rpgm-tools/neo-angband-linoleum/targets` into `dist/`; a
+   fresh checkout has none, and the failure is a black screen with "Failed to
+   resolve import" in the terminal).
+3. Launch: `cd packages/web && NEO_ANGBAND_LAB_BUILD=1 pnpm dev` (the game repo
+   ROOT has no `dev` script) — web: open the served URL with
+   `?labtrust=neowarrior` appended; or the desktop build with
    `--lab-trust=neowarrior`.
 3. In-game: third-party mods allowed → install this repository as a folder →
    **B** on the title screen. Answer the game's own confirm question for the

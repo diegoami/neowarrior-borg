@@ -30,8 +30,9 @@ creation seams the game grants only to first-party mods, #28):
    resolve import" in the terminal).
 3. Launch: `cd packages/web && NEO_ANGBAND_LAB_BUILD=1 pnpm dev` (the game repo
    ROOT has no `dev` script) — web: open the served URL with
-   `?labtrust=neowarrior` appended; or the desktop build with
-   `--lab-trust=neowarrior`.
+   `?labtrust=neowarrior` appended. **Owner-verified end to end 2026-11-03.**
+   The desktop twin (data-folder mods, `--lab-trust=neowarrior`, WSLg) is
+   task better-borg#18 — not yet verified.
 4. In-game: third-party mods allowed → choose a mods folder → install this repository as a folder →
    **B** on the title screen. Answer the game's own confirm question for the
    manage seam once. The picked folder's NAME must equal the manifest id —
